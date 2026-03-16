@@ -17,6 +17,7 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          
       - name: Deploy
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
