@@ -19,76 +19,238 @@ const NODE_W = 140
 const NODE_H = 32
 const PADDING = 60
 
-// Simple force-directed-ish layout using a grid with layering
+// Component-aware layered layout with neighbor ordering.
+// This keeps weakly connected groups separated and reduces edge crossings.
 function layoutNodes(nodes, edges) {
-    if (nodes.length === 0) return []
+    if (nodes.length === 0) return new Map()
 
-    // Build adjacency: who imports whom
-    const outgoing = new Map() // file → files it imports
-    const incoming = new Map() // file → files that import it
-    const pathToIdx = new Map()
-    nodes.forEach((n, i) => pathToIdx.set(n.path, i))
+    const nodeByPath = new Map(nodes.map(n => [n.path, n]))
+    const paths = nodes.map(n => n.path)
+
+    // Directed + undirected adjacency
+    const outgoing = new Map(paths.map(p => [p, new Set()]))
+    const incoming = new Map(paths.map(p => [p, new Set()]))
+    const undirected = new Map(paths.map(p => [p, new Set()]))
 
     for (const [src, tgt] of edges) {
-        if (!pathToIdx.has(src) || !pathToIdx.has(tgt)) continue
-        if (!outgoing.has(src)) outgoing.set(src, [])
-        outgoing.get(src).push(tgt)
-        if (!incoming.has(tgt)) incoming.set(tgt, [])
-        incoming.get(tgt).push(src)
+        if (!nodeByPath.has(src) || !nodeByPath.has(tgt) || src === tgt) continue
+        outgoing.get(src).add(tgt)
+        incoming.get(tgt).add(src)
+        undirected.get(src).add(tgt)
+        undirected.get(tgt).add(src)
     }
 
-    // Topological-ish layering: files with no incoming edges go first
-    const layers = []
-    const placed = new Set()
-
-    // Layer 0: root files (no incoming)
-    const roots = nodes.filter(n => !incoming.has(n.path) || incoming.get(n.path).length === 0)
-    if (roots.length > 0) {
-        layers.push(roots.map(n => n.path))
-        roots.forEach(n => placed.add(n.path))
+    // Find weakly connected components so unrelated groups are separated.
+    const visited = new Set()
+    const components = []
+    for (const start of paths) {
+        if (visited.has(start)) continue
+        const queue = [start]
+        const comp = []
+        visited.add(start)
+        while (queue.length) {
+            const cur = queue.shift()
+            comp.push(cur)
+            for (const next of undirected.get(cur)) {
+                if (visited.has(next)) continue
+                visited.add(next)
+                queue.push(next)
+            }
+        }
+        components.push(comp)
     }
 
-    // Subsequent layers: BFS from roots
-    let maxIter = 20
-    while (placed.size < nodes.length && maxIter-- > 0) {
-        const nextLayer = []
-        const prevLayer = layers[layers.length - 1] || []
-        for (const path of prevLayer) {
-            const deps = outgoing.get(path) || []
-            for (const dep of deps) {
-                if (!placed.has(dep)) {
-                    placed.add(dep)
-                    nextLayer.push(dep)
+    const rowSpacing = NODE_H + Math.round(PADDING * 0.95)
+    const colSpacing = NODE_W + Math.round(PADDING * 0.8)
+
+    const componentLayouts = []
+
+    for (const comp of components.sort((a, b) => b.length - a.length)) {
+        const compSet = new Set(comp)
+
+        // Prefer entry files as roots, then fallback to 0-indegree files.
+        const entryRoots = comp.filter(path => nodeByPath.get(path)?.badge === "entry")
+        const zeroInRoots = comp.filter(path => {
+            let inCount = 0
+            for (const src of incoming.get(path)) {
+                if (compSet.has(src)) inCount++
+            }
+            return inCount === 0
+        })
+        const roots = entryRoots.length > 0
+            ? entryRoots
+            : (zeroInRoots.length > 0 ? zeroInRoots : [comp[0]])
+
+        // Layer assignment using BFS distance from roots.
+        const level = new Map()
+        const queue = [...roots]
+        for (const r of roots) level.set(r, 0)
+
+        while (queue.length) {
+            const cur = queue.shift()
+            const curLevel = level.get(cur)
+            for (const next of outgoing.get(cur)) {
+                if (!compSet.has(next)) continue
+                const candidate = curLevel + 1
+                if (!level.has(next) || candidate < level.get(next)) {
+                    level.set(next, candidate)
+                    queue.push(next)
                 }
             }
         }
-        // Also add any unplaced nodes
-        if (nextLayer.length === 0) {
-            for (const n of nodes) {
-                if (!placed.has(n.path)) {
-                    placed.add(n.path)
-                    nextLayer.push(n.path)
+
+        // Attach unresolved (cyclic/disconnected-in-direction) nodes near known neighbors.
+        let safety = comp.length * 3
+        while (level.size < comp.length && safety-- > 0) {
+            let progressed = false
+            for (const path of comp) {
+                if (level.has(path)) continue
+
+                let bestFromIncoming = Infinity
+                for (const src of incoming.get(path)) {
+                    if (compSet.has(src) && level.has(src)) {
+                        bestFromIncoming = Math.min(bestFromIncoming, level.get(src) + 1)
+                    }
+                }
+
+                let bestFromOutgoing = -Infinity
+                for (const tgt of outgoing.get(path)) {
+                    if (compSet.has(tgt) && level.has(tgt)) {
+                        bestFromOutgoing = Math.max(bestFromOutgoing, level.get(tgt) - 1)
+                    }
+                }
+
+                if (bestFromIncoming !== Infinity) {
+                    level.set(path, bestFromIncoming)
+                    progressed = true
+                } else if (bestFromOutgoing !== -Infinity) {
+                    level.set(path, bestFromOutgoing)
+                    progressed = true
                 }
             }
+
+            if (!progressed) break
         }
-        if (nextLayer.length > 0) layers.push(nextLayer)
-    }
 
-    // Assign positions
-    const positions = new Map()
-    const colSpacing = NODE_W + PADDING
-    const rowSpacing = NODE_H + PADDING
+        for (const path of comp) {
+            if (!level.has(path)) level.set(path, 0)
+        }
 
-    for (let row = 0; row < layers.length; row++) {
-        const layer = layers[row]
-        const totalWidth = layer.length * colSpacing
-        const startX = -totalWidth / 2 + colSpacing / 2
-        for (let col = 0; col < layer.length; col++) {
-            positions.set(layer[col], {
-                x: startX + col * colSpacing,
-                y: row * rowSpacing,
+        const minLevel = Math.min(...level.values())
+        for (const path of comp) {
+            level.set(path, level.get(path) - minLevel)
+        }
+
+        const maxLevel = Math.max(...level.values())
+        const layers = Array.from({ length: maxLevel + 1 }, () => [])
+        for (const path of comp) {
+            layers[level.get(path)].push(path)
+        }
+        for (const layer of layers) layer.sort((a, b) => a.localeCompare(b))
+
+        // Barycentric sweeps reduce arbitrary left/right placement.
+        const order = new Map()
+        const rebuildOrder = () => {
+            for (const layer of layers) {
+                for (let i = 0; i < layer.length; i++) order.set(layer[i], i)
+            }
+        }
+        rebuildOrder()
+
+        const sortLayerByNeighbors = (layerIndex, neighborLayerIndex) => {
+            if (neighborLayerIndex < 0 || neighborLayerIndex >= layers.length) return
+            const neighborSet = new Set(layers[neighborLayerIndex])
+            layers[layerIndex].sort((a, b) => {
+                const score = (path) => {
+                    const neighbors = []
+                    for (const src of incoming.get(path)) if (neighborSet.has(src)) neighbors.push(src)
+                    for (const tgt of outgoing.get(path)) if (neighborSet.has(tgt)) neighbors.push(tgt)
+                    if (neighbors.length === 0) return Number.POSITIVE_INFINITY
+                    let sum = 0
+                    for (const n of neighbors) sum += order.get(n)
+                    return sum / neighbors.length
+                }
+
+                const sa = score(a)
+                const sb = score(b)
+                if (sa === sb) return a.localeCompare(b)
+                return sa - sb
             })
         }
+
+        for (let iter = 0; iter < 5; iter++) {
+            for (let l = 1; l < layers.length; l++) sortLayerByNeighbors(l, l - 1)
+            rebuildOrder()
+            for (let l = layers.length - 2; l >= 0; l--) sortLayerByNeighbors(l, l + 1)
+            rebuildOrder()
+        }
+
+        const local = new Map()
+        let minX = Infinity
+        let maxX = -Infinity
+        let maxY = 0
+
+        for (let row = 0; row < layers.length; row++) {
+            const layer = layers[row]
+            const totalWidth = (layer.length - 1) * colSpacing
+            for (let col = 0; col < layer.length; col++) {
+                const x = col * colSpacing - totalWidth / 2
+                const y = row * rowSpacing
+                const path = layer[col]
+                local.set(path, { x, y })
+                minX = Math.min(minX, x)
+                maxX = Math.max(maxX, x + NODE_W)
+                maxY = Math.max(maxY, y + NODE_H)
+            }
+        }
+
+        componentLayouts.push({
+            local,
+            minX,
+            width: maxX - minX,
+            height: maxY,
+        })
+    }
+
+    // Pack components in rows so unrelated groups don't visually overlap.
+    const positions = new Map()
+    const maxRowWidth = 2600
+    const compGapX = NODE_W + PADDING * 1.6
+    const compGapY = NODE_H + PADDING * 1.4
+    let cursorX = 0
+    let cursorY = 0
+    let rowHeight = 0
+
+    for (const comp of componentLayouts) {
+        if (cursorX > 0 && cursorX + comp.width > maxRowWidth) {
+            cursorX = 0
+            cursorY += rowHeight + compGapY
+            rowHeight = 0
+        }
+
+        const offsetX = cursorX - comp.minX
+        const offsetY = cursorY
+        for (const [path, pos] of comp.local) {
+            positions.set(path, {
+                x: pos.x + offsetX,
+                y: pos.y + offsetY,
+            })
+        }
+
+        cursorX += comp.width + compGapX
+        rowHeight = Math.max(rowHeight, comp.height)
+    }
+
+    // Recenter overall layout around x=0 so auto-fit behaves consistently.
+    let gMinX = Infinity
+    let gMaxX = -Infinity
+    for (const pos of positions.values()) {
+        gMinX = Math.min(gMinX, pos.x)
+        gMaxX = Math.max(gMaxX, pos.x + NODE_W)
+    }
+    const shiftX = (gMinX + gMaxX) / 2
+    for (const [path, pos] of positions) {
+        positions.set(path, { x: pos.x - shiftX, y: pos.y })
     }
 
     return positions
@@ -142,6 +304,7 @@ export default function DependencyGraph() {
     }, [])
 
     const handleMouseDown = useCallback((e) => {
+        e.preventDefault()
         if (e.target.closest(".dep-node")) return
         setDragging(true)
         setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
@@ -211,14 +374,22 @@ export default function DependencyGraph() {
             {/* canvas */}
             <div
                 ref={svgRef}
-                style={{ flex: 1, overflow: "hidden", cursor: dragging ? "grabbing" : "grab", position: "relative", background: "var(--color-base)" }}
+                style={{
+                    flex: 1,
+                    overflow: "hidden",
+                    cursor: dragging ? "grabbing" : "grab",
+                    position: "relative",
+                    background: "var(--color-base)",
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                }}
                 onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
             >
-                <svg width="100%" height="100%" style={{ display: "block" }}>
+                <svg width="100%" height="100%" style={{ display: "block", userSelect: "none", WebkitUserSelect: "none" }}>
                     <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
                         {/* marker for arrowheads */}
                         <defs>
@@ -280,6 +451,7 @@ export default function DependencyGraph() {
                                         fontSize="10"
                                         fontFamily="var(--font-mono)"
                                         fontWeight={isSelected ? "600" : "400"}
+                                        style={{ userSelect: "none", WebkitUserSelect: "none", pointerEvents: "none" }}
                                     >
                                         {node.name.length > 16 ? node.name.slice(0, 15) + "…" : node.name}
                                     </text>
