@@ -56,6 +56,10 @@ export default function DetailPanel() {
         if (sessionId) explain(sessionId, file.path)
     }
 
+    const goBackToOverview = () => {
+        selectFile(null)
+    }
+
     if (!selectedFile) {
         return (
             <div className="detail">
@@ -157,7 +161,7 @@ export default function DetailPanel() {
                         <div className="section" style={{ marginTop: "18px", marginBottom: 0 }}>
                             <div className="section-label">Repository Summary</div>
                             <div className="prose">
-                                <FormattedProse text={summary} />
+                                <MarkdownBlock text={summary} />
                             </div>
                         </div>
                     )}
@@ -188,6 +192,13 @@ export default function DetailPanel() {
                 </div>
 
                 <div className="tab-pills" style={{ marginBottom: 0 }}>
+                    <button
+                        className="otab"
+                        onClick={goBackToOverview}
+                        title="Back to repository overview"
+                    >
+                        overview
+                    </button>
                     <button
                         className={`otab ${activeTab === "explain" ? "on" : ""}`}
                         onClick={() => setActiveTab("explain")}
