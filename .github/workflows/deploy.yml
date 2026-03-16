@@ -23,17 +23,19 @@ jobs:
           ssh -o StrictHostKeyChecking=no \
               -o BatchMode=yes \
               -i ~/.ssh/deploy_key \
-              ubuntu@${{ secrets.EC2_HOST }} \
-              "cd ~/RepoLens/Backend && \
-               echo '📦 Pulling latest code...' && \
-               git reset --hard HEAD && \
-               git pull origin main && \
-               echo '📥 Installing dependencies...' && \
-               npm install --production && \
-               echo '♻️ Reloading app...' && \
-               pm2 reload index --update-env && \
-               echo '✅ Done!' && \
-               pm2 status"
+              ubuntu@${{ secrets.EC2_HOST }} bash -s << 'ENDSSH'
+            set -e
+            echo "📦 Pulling latest code..."
+            cd /home/ubuntu/RepoLens/Backend
+            git reset --hard HEAD
+            git pull origin main
+            echo "📥 Installing dependencies..."
+            npm install --production
+            echo "♻️ Reloading app..."
+            pm2 reload index --update-env || pm2 start index.js --name index
+            echo "✅ Deployment complete!"
+            pm2 status
+          ENDSSH
 
       - name: Verify
         run: |
@@ -41,8 +43,9 @@ jobs:
           ssh -o StrictHostKeyChecking=no \
               -o BatchMode=yes \
               -i ~/.ssh/deploy_key \
-              ubuntu@${{ secrets.EC2_HOST }} \
-              "pm2 describe index | grep -E 'status|restart|uptime'"
+              ubuntu@${{ secrets.EC2_HOST }} bash -s << 'ENDSSH'
+            pm2 describe index | grep -E "status|restart|uptime"
+          ENDSSH
 
       - name: Notify Failure
         if: failure()
