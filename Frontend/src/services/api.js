@@ -1,7 +1,10 @@
 import axios from "axios"
 
+const url = "https://api.repolens.xyz/api"
+// const url = "http://localhost:4000/api"
+
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || "http://localhost:4000/api",
+    baseURL: import.meta.env.VITE_API_URL || url ,
     withCredentials: true,
 })
 
@@ -15,7 +18,7 @@ api.interceptors.response.use(
 
             try {
                 await axios.post(
-                    `${import.meta.env.VITE_API_URL || "http://localhost:4000/api"}/auth/refresh`,
+                    `${import.meta.env.VITE_API_URL || url}/auth/refresh`,
                     {},
                     { withCredentials: true }
                 )
