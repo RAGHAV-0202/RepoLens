@@ -20,19 +20,17 @@ export default function Sidebar({ width }) {
                 >
                     graph
                 </button>
+                <button
+                    className={`view-btn ${sidebarView === "deps" ? "on" : ""}`}
+                    onClick={() => setSidebarView("deps")}
+                >
+                    deps
+                </button>
             </div>
 
-            {sidebarView === "files" && (
-                <div className="tree-wrap">
-                    <FileTree />
-                </div>
-            )}
-
-            {sidebarView === "graph" && (
-                <div className="tree-wrap" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ fontSize: "10px", color: "var(--color-ghost)" }}>coming soon</span>
-                </div>
-            )}
+            <div className="tree-wrap">
+                <FileTree />
+            </div>
         </div>
     )
 }

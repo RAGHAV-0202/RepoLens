@@ -6,6 +6,7 @@ import { buildTree } from "../services/treeBuilder.js"
 import { readFile, readFiles } from "../services/fileReader.js"
 import { createSession } from "../services/sessionStore.js"
 import { getRepoSummary } from "../services/llm.js"
+import { buildDependencyGraph } from "../services/dependencyGraph.js"
 import Analysis from "../models/analysis.model.js"
 
 export const analyzeRepo = asyncHandler(async (req, res, next) => {
@@ -28,6 +29,20 @@ export const analyzeRepo = asyncHandler(async (req, res, next) => {
         if (!getSession(existing.sessionId)) {
             await Analysis.findByIdAndDelete(existing._id)
         }else{
+            // Lazily compute dependency graph if missing
+            let depGraph = existing.dependencyGraph
+            const session = getSession(existing.sessionId)
+            if ((!depGraph || !depGraph.nodes || depGraph.nodes.length === 0) && existing.treeJSON && session?.tempDir) {
+                try {
+                    depGraph = buildDependencyGraph(session.tempDir, existing.treeJSON)
+                    existing.dependencyGraph = depGraph
+                    await existing.save()
+                } catch (err) {
+                    console.error("[analyze] lazy dep graph error:", err.message)
+                    depGraph = { nodes: [], edges: [] }
+                }
+            }
+
             return res.status(200).json(new ApiResponse(200, {
                 sessionId: existing.sessionId,
                 tree: existing.treeJSON,
@@ -35,6 +50,7 @@ export const analyzeRepo = asyncHandler(async (req, res, next) => {
                 stats: existing.stats,
                 architecture: existing.architecture,
                 suggestions: existing.suggestions,
+                dependencyGraph: depGraph || { nodes: [], edges: [] },
                 repoName: existing.repoName,
                 cached: true
             }, "Returning cached analysis")) 
@@ -51,6 +67,14 @@ export const analyzeRepo = asyncHandler(async (req, res, next) => {
     const { sessionId, tempDir, repoName, sizeMB } = cloneResult
 
     const { tree, stats } = buildTree(tempDir)
+
+    // Build import dependency graph
+    let dependencyGraph = { nodes: [], edges: [] }
+    try {
+        dependencyGraph = buildDependencyGraph(tempDir, tree)
+    } catch (err) {
+        console.error("[analyze] dependency graph error:", err.message)
+    }
 
     let readmeContent = ""
     try {
@@ -94,6 +118,7 @@ export const analyzeRepo = asyncHandler(async (req, res, next) => {
         repoName,
         sessionId,
         treeJSON: tree,
+        dependencyGraph,
         summary,
         architecture,
         suggestions,
@@ -121,6 +146,7 @@ export const analyzeRepo = asyncHandler(async (req, res, next) => {
         stats: analysis.stats,
         architecture,
         suggestions,
+        dependencyGraph,
         repoName,
         sizeMB,
         cached: false
@@ -266,6 +292,24 @@ export const resumeSession = asyncHandler(async (req, res, next) => {
         }
     }
 
+    // Lazily compute dependency graph if missing (for older analyses)
+    let depGraph = analysis.dependencyGraph
+    if ((!depGraph || !depGraph.nodes || depGraph.nodes.length === 0) && analysis.treeJSON) {
+        const session = getSession(sessionId)
+        if (session?.tempDir) {
+            try {
+                depGraph = buildDependencyGraph(session.tempDir, analysis.treeJSON)
+                analysis.dependencyGraph = depGraph
+                await analysis.save()
+            } catch (err) {
+                console.error("[resume] dependency graph error:", err.message)
+                depGraph = { nodes: [], edges: [] }
+            }
+        } else {
+            depGraph = { nodes: [], edges: [] }
+        }
+    }
+
     return res.status(200).json(new ApiResponse(200, {
         sessionId: analysis.sessionId,
         tree: analysis.treeJSON,
@@ -273,6 +317,7 @@ export const resumeSession = asyncHandler(async (req, res, next) => {
         stats: analysis.stats,
         architecture: analysis.architecture,
         suggestions: analysis.suggestions,
+        dependencyGraph: depGraph || { nodes: [], edges: [] },
         repoName: analysis.repoName,
         repoUrl: analysis.repoUrl,
         cached: true,

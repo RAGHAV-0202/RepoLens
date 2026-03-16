@@ -82,7 +82,7 @@ export default function DetailPanel() {
                 {activeTab === "code" ? (
                     <div style={{ height: "100%", overflow: "auto" }}>
                         {isFetchingRaw ? (
-                            <div style={{ padding: "20px", color: "#8a7f6e", fontSize: "11px", fontFamily: "var(--font-mono)" }}>
+                            <div style={{ padding: "20px", color: "var(--color-faint)", fontSize: "11px", fontFamily: "var(--font-mono)" }}>
                                 Loading code...
                             </div>
                         ) : (

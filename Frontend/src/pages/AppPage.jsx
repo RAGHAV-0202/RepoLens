@@ -8,6 +8,7 @@ import DetailPanel from "../components/panels/DetailPanel"
 import OverviewPanel from "../components/panels/OverviewPanel"
 import ChatPanel from "../components/chat/ChatPanel"
 import RepoTreemap from "../components/panels/RepoTreemap"
+import DependencyGraph from "../components/panels/DependencyGraph"
 
 const MIN_SIDEBAR = 160
 const MAX_SIDEBAR = 400
@@ -117,7 +118,7 @@ export default function AppPage() {
 
                 <div className="main">
                     <div className="panels-row">
-                        {sidebarView === "graph" ? <RepoTreemap /> : <DetailPanel />}
+                        {sidebarView === "graph" ? <RepoTreemap /> : sidebarView === "deps" ? <DependencyGraph /> : <DetailPanel />}
                         <OverviewPanel />
                     </div>
                     <ChatPanel />
@@ -126,13 +127,10 @@ export default function AppPage() {
 
             {/* ── restoring session overlay ── */}
             {isRestoring && (
-                <div style={{
+                <div className="overlay-backdrop" style={{
                     position: "fixed",
                     inset: 0,
                     zIndex: 9998,
-                    background: "rgba(250, 249, 246, 0.6)",
-                    backdropFilter: "blur(8px)",
-                    WebkitBackdropFilter: "blur(8px)",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
@@ -161,13 +159,10 @@ export default function AppPage() {
 
             {/* ── unauthenticated guest overlay ── */}
             {!user && (
-                <div style={{
+                <div className="overlay-backdrop" style={{
                     position: "fixed",
                     inset: 0,
                     zIndex: 9999,
-                    background: "rgba(250, 249, 246, 0.4)", // --color-surface with opacity
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",

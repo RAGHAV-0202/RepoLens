@@ -189,6 +189,7 @@ import useFileExplain from "../../hooks/useFileExplain"
 export default function RepoTreemap() {
     const tree = useAppStore((s) => s.tree)
     const selectFile = useAppStore((s) => s.selectFile)
+    const selectedFile = useAppStore((s) => s.selectedFile)
     const sessionId = useAppStore((s) => s.sessionId)
     const { explain } = useFileExplain()
 
@@ -239,7 +240,10 @@ export default function RepoTreemap() {
                 onMouseLeave={() => setHovered(null)}
             >
                 <svg viewBox="0 0 800 500" width="100%" height="100%" preserveAspectRatio="none" style={{ display: "block" }}>
-                    {rects.map((r, i) => (
+                    {rects.map((r, i) => {
+                        const isSelected = selectedFile?.path === r.path
+                        const isHighlighted = hovered === i || isSelected
+                        return (
                         <g key={i}>
                             <rect
                                 x={r.rx + 1}
@@ -248,10 +252,10 @@ export default function RepoTreemap() {
                                 height={Math.max(0, r.rh - 2)}
                                 rx="2"
                                 fill={r.color}
-                                opacity={hovered === i ? 0.95 : 0.7}
-                                stroke={hovered === i ? "var(--color-ink)" : "var(--color-surface)"}
-                                strokeWidth={hovered === i ? 2 : 1}
-                                style={{ cursor: "pointer", transition: "opacity 0.12s, stroke 0.12s" }}
+                                opacity={isHighlighted ? 1 : 0.65}
+                                stroke={isSelected ? "#fff" : hovered === i ? "var(--color-ink)" : "var(--color-surface)"}
+                                strokeWidth={isSelected ? 2.5 : hovered === i ? 2 : 1}
+                                style={{ cursor: "pointer", transition: "opacity 0.12s, stroke 0.12s, stroke-width 0.12s" }}
                                 onMouseEnter={() => setHovered(i)}
                                 onClick={() => {
                                     selectFile(r)
@@ -290,7 +294,7 @@ export default function RepoTreemap() {
                                 </text>
                             )}
                         </g>
-                    ))}
+                    )})}
                 </svg>
 
                 {/* tooltip */}

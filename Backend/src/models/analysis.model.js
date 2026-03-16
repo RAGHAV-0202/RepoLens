@@ -39,6 +39,12 @@ const AnalysisSchema = new mongoose.Schema({
     required: true
   },
 
+  // import/dependency graph { nodes: [...], edges: [...] }
+  dependencyGraph: {
+    type: mongoose.Schema.Types.Mixed,
+    default: { nodes: [], edges: [] }
+  },
+
   // LLM-generated repo overview — right panel summary
   summary: {
     type: String,

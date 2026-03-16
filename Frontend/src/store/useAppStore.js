@@ -4,6 +4,9 @@ const useAppStore = create((set, get) => ({
     // auth
     user: null,
 
+    // theme
+    darkMode: JSON.parse(localStorage.getItem("repolens-dark") || "false"),
+
     // current analysis
     sessionId: null,
     repoName: null,
@@ -13,6 +16,7 @@ const useAppStore = create((set, get) => ({
     stats: {},
     architecture: {},
     suggestions: [],
+    dependencyGraph: { nodes: [], edges: [] },
     cached: false,
     sizeMB: null,
     analyzeTime: null,
@@ -40,6 +44,13 @@ const useAppStore = create((set, get) => ({
 
     setUser: (user) => set({ user }),
 
+    toggleDarkMode: () => set((s) => {
+        const next = !s.darkMode
+        localStorage.setItem("repolens-dark", JSON.stringify(next))
+        document.documentElement.setAttribute("data-theme", next ? "dark" : "light")
+        return { darkMode: next }
+    }),
+
     setAnalysis: (data) => set({
         sessionId: data.sessionId,
         repoName: data.repoName,
@@ -49,6 +60,7 @@ const useAppStore = create((set, get) => ({
         stats: data.stats,
         architecture: data.architecture,
         suggestions: data.suggestions,
+        dependencyGraph: data.dependencyGraph || { nodes: [], edges: [] },
         cached: data.cached || false,
         sizeMB: data.sizeMB || null,
         chatHistory: [],
@@ -97,6 +109,7 @@ const useAppStore = create((set, get) => ({
         stats: {},
         architecture: {},
         suggestions: [],
+        dependencyGraph: { nodes: [], edges: [] },
         cached: false,
         sizeMB: null,
         analyzeTime: null,
