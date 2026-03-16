@@ -4,8 +4,7 @@ import path from "path"
 import fs from "fs"
 import { fileURLToPath } from "url"
 
-
-const MAX_REPO_SIZE_MB = 100
+const MAX_REPO_SIZE_MB = Number(process.env.MAX_REPO_SIZE_MB || 200)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const CLONE_BASE_DIR = path.resolve(__dirname, "../../temp")

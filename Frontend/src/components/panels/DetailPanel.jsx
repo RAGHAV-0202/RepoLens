@@ -41,7 +41,7 @@ export default function DetailPanel() {
     const keyFolders = useMemo(() => getTopFolders(tree, 8), [tree])
     const mainFeatures = useMemo(() => inferMainFeatures(summary), [summary])
     const startHereFiles = useMemo(() => getStartHereFiles(tree), [tree])
-    const inferredStack = useMemo(() => inferStack(tree, stats), [tree, stats])
+    const inferredArchitecture = useMemo(() => inferStack(tree, stats), [tree, stats])
 
     // reset tab when file changes
     const prevFile = useAppStore(s => s.previousSelectedFile)
@@ -74,22 +74,12 @@ export default function DetailPanel() {
                     <div className="section">
                         <div className="section-label">Architecture Overview</div>
                         <div className="ov-card" style={{ marginBottom: 0 }}>
-                            <div className="kv">
-                                <div className="kv-k">frontend</div>
-                                <div className="kv-v">{inferredStack.frontend}</div>
-                            </div>
-                            <div className="kv">
-                                <div className="kv-k">backend</div>
-                                <div className="kv-v">{inferredStack.backend}</div>
-                            </div>
-                            <div className="kv">
-                                <div className="kv-k">database</div>
-                                <div className="kv-v">{inferredStack.database}</div>
-                            </div>
-                            <div className="kv">
-                                <div className="kv-k">language</div>
-                                <div className="kv-v">{stats?.primaryLanguage || "Unknown"}</div>
-                            </div>
+                            {inferredArchitecture.rows.map((row) => (
+                                <div className="kv" key={row.label}>
+                                    <div className="kv-k">{row.label}</div>
+                                    <div className="kv-v">{row.value}</div>
+                                </div>
+                            ))}
                         </div>
                     </div>
 
@@ -526,21 +516,114 @@ function inferMainFeatures(summary) {
 }
 
 function inferStack(tree, stats) {
-    const folders = getTopFolders(tree, 20).map((f) => f.toLowerCase())
+    const files = flattenFiles(tree, [])
+    const topFolders = getTopFolders(tree, 40).map((f) => f.toLowerCase())
+    const paths = files.map((f) => (f.path || "").toLowerCase())
+    const names = files.map((f) => (f.name || "").toLowerCase())
 
-    const detect = (aliases) => {
-        const hit = folders.find((f) => aliases.some((a) => f.includes(a)))
-        return hit || null
-    }
+    const hasName = (name) => names.includes(name)
+    const hasExt = (exts) => files.some((f) => exts.includes((f.ext || "").toLowerCase()))
+    const hasPathToken = (tokens) => paths.some((p) => tokens.some((t) => p.includes(t)))
+    const hasFolderToken = (tokens) => topFolders.some((f) => tokens.some((t) => f.includes(t)))
 
-    const front = detect(["frontend", "client", "web", "ui", "app"])
-    const back = detect(["backend", "server", "api"])
-    const data = detect(["database", "db", "model", "models", "mongo", "prisma", "schema", "migration"])
+    const dominantCodeLanguage = inferDominantCodeLanguage(files, stats)
+
+    const hasReactLike = hasExt([".jsx", ".tsx"]) || hasName("vite.config.js") || hasName("vite.config.ts")
+    const hasNext = hasName("next.config.js") || hasName("next.config.mjs")
+    const hasFrontendSignals =
+        (hasReactLike ? 2 : 0) +
+        (hasPathToken(["/components/", "/pages/", "/app/"]) ? 1 : 0) +
+        (hasName("index.html") ? 1 : 0) +
+        (hasFolderToken(["frontend", "client", "web", "ui"]) ? 1 : 0)
+
+    const hasBackendSignals =
+        (hasPathToken(["/routes/", "/controllers/", "/services/", "/middlewares/"]) ? 2 : 0) +
+        (hasName("server.js") || hasName("app.js") || hasName("main.py") || hasName("manage.py") ? 1 : 0) +
+        (hasFolderToken(["backend", "api", "server"]) ? 1 : 0)
+
+    const isNodeRuntime = hasName("package.json") && hasExt([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"])
+    const isPythonRuntime = hasExt([".py"]) || hasName("requirements.txt") || hasName("pyproject.toml")
+    const isJavaRuntime = hasExt([".java"]) || hasName("pom.xml") || hasName("build.gradle")
+    const isGoRuntime = hasExt([".go"]) || hasName("go.mod")
+
+    let runtime = "Not clearly detected"
+    if (isNodeRuntime) runtime = "Node.js"
+    else if (isPythonRuntime) runtime = "Python"
+    else if (isJavaRuntime) runtime = "Java/JVM"
+    else if (isGoRuntime) runtime = "Go"
+
+    let uiLayer = "Not obvious"
+    if (hasNext) uiLayer = "Next.js"
+    else if (hasReactLike) uiLayer = hasName("vite.config.js") || hasName("vite.config.ts") ? "React + Vite" : "React-style UI"
+    else if (hasFrontendSignals >= 2) uiLayer = "Web UI present"
+
+    let apiLayer = "Not obvious"
+    if (hasPathToken(["/routes/", "/controllers/"]) && isNodeRuntime) apiLayer = "Node.js API (Express-style structure)"
+    else if (isPythonRuntime && hasName("manage.py")) apiLayer = "Django-style backend"
+    else if (isPythonRuntime && hasName("app.py")) apiLayer = "Python app backend"
+    else if (hasBackendSignals >= 2) apiLayer = "Backend service present"
+
+    let dataLayer = "Not clearly detected"
+    if (hasName("schema.prisma")) dataLayer = "Prisma ORM"
+    else if (hasPathToken(["mongo", "mongoose"]) || hasFolderToken(["mongo", "mongodb"])) dataLayer = "MongoDB-style data layer"
+    else if (hasExt([".sql"]) || hasPathToken(["/migrations/", "schema.sql"])) dataLayer = "SQL database layer"
+    else if (hasPathToken(["/models/"]) || hasFolderToken(["models"])) dataLayer = "Model layer present (DB not explicit)"
+
+    let shape = "Mixed codebase"
+    if (hasFrontendSignals >= 2 && hasBackendSignals >= 2) shape = "Full-stack application"
+    else if (hasBackendSignals >= 2) shape = "Backend/API service"
+    else if (hasFrontendSignals >= 2) shape = "Frontend application"
 
     return {
-        frontend: front ? `Detected from folder: ${front}` : "Not obvious from folder structure",
-        backend: back ? `Detected from folder: ${back}` : "Not obvious from folder structure",
-        database: data ? `Detected from folder: ${data}` : "Not obvious from folder structure",
-        language: stats?.primaryLanguage || "Unknown",
+        rows: [
+            { label: "shape", value: shape },
+            { label: "runtime", value: runtime },
+            { label: "ui layer", value: uiLayer },
+            { label: "api layer", value: apiLayer },
+            { label: "data layer", value: dataLayer },
+            { label: "language", value: dominantCodeLanguage },
+        ]
     }
+}
+
+function inferDominantCodeLanguage(files, stats) {
+    const extToLang = {
+        ".js": "JavaScript",
+        ".jsx": "JavaScript/React",
+        ".ts": "TypeScript",
+        ".tsx": "TypeScript/React",
+        ".py": "Python",
+        ".java": "Java",
+        ".go": "Go",
+        ".rs": "Rust",
+        ".cpp": "C++",
+        ".c": "C",
+        ".cs": "C#",
+        ".rb": "Ruby",
+        ".php": "PHP",
+        ".kt": "Kotlin",
+        ".swift": "Swift",
+    }
+
+    const ignoreExt = new Set([
+        ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".xml",
+        ".css", ".scss", ".html", ".lock", ".svg"
+    ])
+
+    const score = new Map()
+    for (const file of files) {
+        const ext = (file.ext || "").toLowerCase()
+        if (!ext || ignoreExt.has(ext) || !extToLang[ext]) continue
+        const lang = extToLang[ext]
+        const weight = Math.max(1, Number(file.lines) || 1)
+        score.set(lang, (score.get(lang) || 0) + weight)
+    }
+
+    if (score.size === 0) {
+        const fallback = stats?.primaryLanguage
+        if (!fallback || fallback.toLowerCase() === "markdown") return "Unknown (docs-heavy repository)"
+        return fallback
+    }
+
+    return [...score.entries()].sort((a, b) => b[1] - a[1])[0][0]
 }

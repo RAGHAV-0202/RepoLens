@@ -22,17 +22,17 @@ function AnimatedBackground() {
         <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0, pointerEvents: "none", background: "var(--color-base)" }}>
             <div style={{
                 position: "absolute", top: "15%", left: "20%", width: "45vw", height: "45vw",
-                background: "radial-gradient(circle, rgba(147, 130, 255, 0.12) 0%, rgba(147, 130, 255, 0) 70%)",
+                background: "radial-gradient(circle, var(--landing-orb-1) 0%, rgba(0, 0, 0, 0) 70%)",
                 borderRadius: "50%", filter: "blur(60px)", animation: "float1 14s ease-in-out infinite"
             }} />
             <div style={{
                 position: "absolute", top: "40%", right: "15%", width: "40vw", height: "40vw",
-                background: "radial-gradient(circle, rgba(100, 200, 255, 0.1) 0%, rgba(100, 200, 255, 0) 70%)",
+                background: "radial-gradient(circle, var(--landing-orb-2) 0%, rgba(0, 0, 0, 0) 70%)",
                 borderRadius: "50%", filter: "blur(60px)", animation: "float2 18s ease-in-out infinite"
             }} />
             <div style={{
                 position: "absolute", bottom: "-10%", left: "35%", width: "50vw", height: "30vw",
-                background: "radial-gradient(circle, rgba(255, 180, 150, 0.08) 0%, rgba(255, 180, 150, 0) 70%)",
+                background: "radial-gradient(circle, var(--landing-orb-3) 0%, rgba(0, 0, 0, 0) 70%)",
                 borderRadius: "50%", filter: "blur(60px)", animation: "float3 22s ease-in-out infinite"
             }} />
             <div style={{
@@ -240,7 +240,7 @@ const styles = {
         textDecoration: "none",
         fontWeight: 600,
         transition: "transform 0.15s, box-shadow 0.15s",
-        boxShadow: "0 4px 14px 0 rgba(0,0,0,0.1)",
+        boxShadow: "var(--landing-cta-shadow)",
     },
 
     // hero
@@ -261,15 +261,15 @@ const styles = {
         fontSize: "12px",
         fontWeight: 600,
         color: "var(--color-ink)",
-        background: "rgba(255, 255, 255, 0.5)",
+        background: "var(--landing-badge-bg)",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
-        border: "1px solid rgba(0,0,0,0.05)",
+        border: "1px solid var(--landing-badge-border)",
         borderRadius: "100px",
         padding: "6px 18px",
         marginBottom: "28px",
         letterSpacing: "0.01em",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+        boxShadow: "var(--landing-badge-shadow)",
     },
     badgeDot: {
         width: "6px",
@@ -288,7 +288,7 @@ const styles = {
         color: "var(--color-ink)",
     },
     headingGradient: {
-        background: "linear-gradient(135deg, #1c1b19 0%, #6b5f4a 100%)",
+        background: "var(--landing-heading-gradient)",
         WebkitBackgroundClip: "text",
         WebkitTextFillColor: "transparent",
         backgroundClip: "text",
@@ -313,7 +313,7 @@ const styles = {
         position: "absolute",
         inset: "-2px",
         borderRadius: "18px",
-        background: "linear-gradient(90deg, rgba(147,130,255,0.3), rgba(100,200,255,0.3))",
+        background: "var(--landing-search-glow)",
         filter: "blur(14px)",
         opacity: 0.5,
         zIndex: -1,
@@ -322,13 +322,13 @@ const styles = {
         display: "flex",
         alignItems: "center",
         gap: "10px",
-        background: "rgba(255, 255, 255, 0.6)",
+        background: "var(--landing-search-bg)",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
-        border: "1px solid rgba(255, 255, 255, 0.8)",
+        border: "1px solid var(--landing-search-border)",
         borderRadius: "16px",
         padding: "8px 10px 8px 18px",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)",
+        boxShadow: "var(--landing-search-shadow)",
     },
     searchInput: {
         flex: 1,
@@ -368,10 +368,10 @@ const styles = {
         color: "var(--color-err)",
         marginTop: "16px",
         textAlign: "center",
-        background: "rgba(184, 64, 64, 0.1)",
+        background: "var(--landing-error-bg)",
         padding: "8px 16px",
         borderRadius: "8px",
-        border: "1px solid rgba(184, 64, 64, 0.2)",
+        border: "1px solid var(--landing-error-border)",
     },
 
     // chips
@@ -389,10 +389,10 @@ const styles = {
         fontWeight: 500,
     },
     chip: {
-        background: "rgba(255, 255, 255, 0.5)",
+        background: "var(--landing-chip-bg)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
-        border: "1px solid rgba(0,0,0,0.06)",
+        border: "1px solid var(--landing-chip-border)",
         borderRadius: "8px",
         padding: "6px 14px",
         fontSize: "12px",
@@ -414,14 +414,14 @@ const styles = {
         zIndex: 2,
     },
     featureCard: {
-        background: "rgba(255, 255, 255, 0.45)",
+        background: "var(--landing-card-bg)",
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
-        border: "1px solid rgba(255, 255, 255, 0.6)",
+        border: "1px solid var(--landing-card-border)",
         borderRadius: "16px",
         padding: "28px 24px",
         textAlign: "center",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.02), inset 0 1px 0 rgba(255,255,255,0.4)",
+        boxShadow: "var(--landing-card-shadow)",
         transition: "transform 0.2s, box-shadow 0.2s, background 0.2s",
         cursor: "default",
     },
@@ -430,9 +430,9 @@ const styles = {
         marginBottom: "16px",
         display: "inline-block",
         padding: "12px",
-        background: "rgba(255, 255, 255, 0.7)",
+        background: "var(--landing-icon-bg)",
         borderRadius: "12px",
-        boxShadow: "0 2px 10px rgba(0,0,0,0.02)",
+        boxShadow: "var(--landing-icon-shadow)",
     },
     featureTitle: {
         fontSize: "15px",

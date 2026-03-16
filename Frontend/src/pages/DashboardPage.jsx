@@ -1,28 +1,36 @@
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import useAppStore from "../store/useAppStore"
 import useAnalyze from "../hooks/useAnalyze"
 import api, { clearStoredAuthTokens } from "../services/api"
 
+const REPOS_PER_PAGE = 6
+const HISTORY_PER_PAGE = 5
+const SIDEBAR_REPO_LIMIT = 8
+
 export default function DashboardPage() {
     const navigate = useNavigate()
     const user = useAppStore((s) => s.user)
     const isAnalyzing = useAppStore((s) => s.isAnalyzing)
+    const analyzeProgress = useAppStore((s) => s.analyzeProgress)
+    const analyzeStage = useAppStore((s) => s.analyzeStage)
     const darkMode = useAppStore((s) => s.darkMode)
     const toggleDarkMode = useAppStore((s) => s.toggleDarkMode)
-    
+
     const [history, setHistory] = useState([])
     const [trendingRepos, setTrendingRepos] = useState([])
     const [topRepos, setTopRepos] = useState([])
     const [myRepos, setMyRepos] = useState([])
-    
+
     const [isLoadingHistory, setIsLoadingHistory] = useState(true)
     const [isLoadingTrending, setIsLoadingTrending] = useState(true)
     const [isLoadingTop, setIsLoadingTop] = useState(true)
     const [isLoadingMyRepos, setIsLoadingMyRepos] = useState(true)
-    
-    const [activeTab, setActiveTab] = useState("top") // "top" | "trending"
-    
+
+    const [activeTab, setActiveTab] = useState("top")
+    const [reposPage, setReposPage] = useState(1)
+    const [historyPage, setHistoryPage] = useState(1)
+
     const [repoUrl, setRepoUrl] = useState("")
     const [error, setError] = useState("")
     const { analyze } = useAnalyze()
@@ -32,57 +40,78 @@ export default function DashboardPage() {
             navigate("/login", { replace: true })
             return
         }
-        
-        // 1. Fetch user's last analyses
+
+        let cancelled = false
+
         api.get("/analyze/history")
-            .then(res => {
-                if (res.data?.success) setHistory(res.data.data)
+            .then((res) => {
+                if (!cancelled && res.data?.success) {
+                    setHistory(Array.isArray(res.data.data) ? res.data.data : [])
+                }
             })
-            .catch(err => console.error("Failed to load history:", err))
-            .finally(() => setIsLoadingHistory(false))
+            .catch((err) => console.error("Failed to load history:", err))
+            .finally(() => {
+                if (!cancelled) setIsLoadingHistory(false)
+            })
 
-        // 2a. Fetch trending repos from GitHub (Recent)
         api.get("/github/trending?type=trending")
-            .then(res => {
-                if (res.data?.success) setTrendingRepos(res.data.data)
+            .then((res) => {
+                if (!cancelled && res.data?.success) {
+                    setTrendingRepos(Array.isArray(res.data.data) ? res.data.data : [])
+                }
             })
-            .catch(err => console.error("Failed to load trending:", err))
-            .finally(() => setIsLoadingTrending(false))
+            .catch((err) => console.error("Failed to load trending repositories:", err))
+            .finally(() => {
+                if (!cancelled) setIsLoadingTrending(false)
+            })
 
-        // 2b. Fetch top repos from GitHub (All-time)
         api.get("/github/trending?type=top")
-            .then(res => {
-                if (res.data?.success) setTopRepos(res.data.data)
+            .then((res) => {
+                if (!cancelled && res.data?.success) {
+                    setTopRepos(Array.isArray(res.data.data) ? res.data.data : [])
+                }
             })
-            .catch(err => console.error("Failed to load top repos:", err))
-            .finally(() => setIsLoadingTop(false))
+            .catch((err) => console.error("Failed to load top repositories:", err))
+            .finally(() => {
+                if (!cancelled) setIsLoadingTop(false)
+            })
 
-        // 3. Fetch user's own GitHub repos if they linked GitHub
         if (user.githubId) {
             api.get("/github/my-repos")
-                .then(res => {
-                    if (res.data?.success) setMyRepos(res.data.data)
+                .then((res) => {
+                    if (!cancelled && res.data?.success) {
+                        setMyRepos(Array.isArray(res.data.data) ? res.data.data : [])
+                    }
                 })
-                .catch(err => console.error("Failed to load user repos:", err))
-                .finally(() => setIsLoadingMyRepos(false))
+                .catch((err) => console.error("Failed to load user repositories:", err))
+                .finally(() => {
+                    if (!cancelled) setIsLoadingMyRepos(false)
+                })
         } else {
             setIsLoadingMyRepos(false)
         }
 
+        return () => {
+            cancelled = true
+        }
     }, [user, navigate])
 
     const handleAnalyzeNew = async (e, directUrl = null) => {
         if (e) e.preventDefault()
         if (isAnalyzing) return
-        setError("")
 
-        const urlToAnalyze = directUrl || repoUrl.trim()
-        if (!urlToAnalyze) return
+        setError("")
+        const urlToAnalyze = (directUrl || repoUrl).trim()
+
+        if (!urlToAnalyze) {
+            setError("Enter a valid repository URL.")
+            return
+        }
 
         try {
             await analyze(urlToAnalyze)
         } catch (err) {
-            setError(err.message)
+            setError(err?.message || "Failed to start analysis.")
         }
     }
 
@@ -91,299 +120,504 @@ export default function DashboardPage() {
         navigate(`/app?session=${sessionId}`)
     }
 
-    if (!user) return null
+    const handleLogout = async () => {
+        try {
+            await api.post("/auth/logout")
+        } catch (err) {
+            console.error("Logout request failed:", err)
+        } finally {
+            clearStoredAuthTokens()
+            useAppStore.getState().setUser(null)
+            navigate("/")
+        }
+    }
 
     const displayedRepos = activeTab === "top" ? topRepos : trendingRepos
     const isLoadingDisplayedRepos = activeTab === "top" ? isLoadingTop : isLoadingTrending
 
+    const totalRepoPages = Math.max(1, Math.ceil(displayedRepos.length / REPOS_PER_PAGE))
+    const safeReposPage = Math.min(Math.max(1, reposPage), totalRepoPages)
+
+    const totalHistoryPages = Math.max(1, Math.ceil(history.length / HISTORY_PER_PAGE))
+    const safeHistoryPage = Math.min(Math.max(1, historyPage), totalHistoryPages)
+
+    const visibleRepos = useMemo(() => {
+        const start = (safeReposPage - 1) * REPOS_PER_PAGE
+        return displayedRepos.slice(start, start + REPOS_PER_PAGE)
+    }, [displayedRepos, safeReposPage])
+
+    const visibleHistory = useMemo(() => {
+        const start = (safeHistoryPage - 1) * HISTORY_PER_PAGE
+        return history.slice(start, start + HISTORY_PER_PAGE)
+    }, [history, safeHistoryPage])
+
+    useEffect(() => {
+        setReposPage(1)
+    }, [activeTab])
+
+    useEffect(() => {
+        setReposPage((page) => Math.min(page, totalRepoPages))
+    }, [totalRepoPages])
+
+    useEffect(() => {
+        setHistoryPage((page) => Math.min(page, totalHistoryPages))
+    }, [totalHistoryPages])
+
+    if (!user) return null
+
     return (
-        <div style={{ minHeight: "100vh", backgroundColor: "var(--color-base)", color: "var(--color-ink)", display: "flex", flexDirection: "column" }}>
-            {/* Topbar */}
-            <header style={{ height: "60px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", padding: "0 24px", justifyContent: "space-between", background: "var(--color-surface)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                    <div style={{ fontWeight: 600, fontSize: "16px", letterSpacing: "0.02em", cursor: "pointer" }} onClick={() => navigate("/")}>RepoLens</div>
-                    <form onSubmit={handleAnalyzeNew} style={{ display: "flex", alignItems: "center", position: "relative" }}>
-                        <input 
-                            type="text" 
+        <div
+            style={{
+                minHeight: "100vh",
+                backgroundColor: "var(--color-base)",
+                color: "var(--color-ink)",
+                display: "flex",
+                flexDirection: "column"
+            }}
+        >
+            <header
+                style={{
+                    height: "60px",
+                    borderBottom: "1px solid var(--color-border)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0 24px",
+                    background: "var(--color-surface)",
+                    gap: "16px"
+                }}
+            >
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0, flex: 1 }}>
+                    <div
+                        style={{ fontWeight: 600, fontSize: "16px", letterSpacing: "0.02em", cursor: "pointer", flexShrink: 0 }}
+                        onClick={() => navigate("/")}
+                    >
+                        RepoLens
+                    </div>
+
+                    <form onSubmit={handleAnalyzeNew} style={{ display: "flex", alignItems: "center", minWidth: 0, flex: 1 }}>
+                        <input
+                            type="text"
                             placeholder="Analyze a GitHub repository URL..."
                             value={repoUrl}
                             onChange={(e) => setRepoUrl(e.target.value)}
                             disabled={isAnalyzing}
-                            style={{ 
-                                width: "350px", 
-                                background: "var(--color-base)", 
-                                border: "1px solid var(--color-border)", 
-                                borderRadius: "6px", 
-                                padding: "6px 12px", 
+                            style={{
+                                width: "100%",
+                                maxWidth: "420px",
+                                minWidth: "180px",
+                                background: "var(--color-base)",
+                                border: "1px solid var(--color-border)",
+                                borderRadius: "6px",
+                                padding: "6px 12px",
                                 fontSize: "12px",
                                 outline: "none",
                                 color: "var(--color-ink)",
                                 fontFamily: "var(--font-mono)"
                             }}
                         />
-                        <button 
-                            type="submit" 
+                        <button
+                            type="submit"
                             disabled={isAnalyzing || !repoUrl.trim()}
-                            style={{ 
-                                background: "var(--color-ink)", 
-                                color: "var(--color-base)", 
-                                border: "none", 
-                                borderRadius: "6px", 
-                                padding: "6px 14px", 
-                                fontSize: "11px", 
-                                cursor: isAnalyzing ? "wait" : "pointer", 
+                            style={{
+                                background: "var(--color-ink)",
+                                color: "var(--color-base)",
+                                border: "none",
+                                borderRadius: "6px",
+                                padding: "6px 14px",
+                                fontSize: "11px",
                                 fontWeight: 600,
-                                opacity: (isAnalyzing || !repoUrl.trim()) ? 0.5 : 1,
-                                marginLeft: "8px"
+                                marginLeft: "8px",
+                                opacity: isAnalyzing || !repoUrl.trim() ? 0.5 : 1,
+                                cursor: isAnalyzing ? "wait" : "pointer",
+                                flexShrink: 0
                             }}
                         >
-                            {isAnalyzing ? "Analyzing…" : "Analyze"}
+                            {isAnalyzing ? "Analyzing..." : "Analyze"}
                         </button>
                     </form>
-                    {error && (
-                        <span style={{ fontSize: "11px", color: "var(--color-err, #e55)", marginLeft: "16px" }}>{error}</span>
+
+                    {isAnalyzing && (
+                        <div style={{ width: "240px", flexShrink: 0 }}>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    fontSize: "10px",
+                                    color: "var(--color-ghost)",
+                                    marginBottom: "4px"
+                                }}
+                            >
+                                <span>{analyzeStage || "Processing..."}</span>
+                                <span>{Math.max(0, Math.min(100, Math.round(analyzeProgress)))}%</span>
+                            </div>
+                            <div
+                                style={{
+                                    height: "6px",
+                                    borderRadius: "999px",
+                                    background: "var(--color-muted)",
+                                    border: "1px solid var(--color-border)",
+                                    overflow: "hidden"
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        height: "100%",
+                                        width: `${Math.max(0, Math.min(100, analyzeProgress))}%`,
+                                        background: "linear-gradient(90deg, var(--color-core-text), var(--color-ink))",
+                                        transition: "width 0.45s ease"
+                                    }}
+                                />
+                            </div>
+                        </div>
                     )}
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "13px" }}>
-                    <button 
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+                    <button
                         onClick={toggleDarkMode}
                         className="theme-toggle"
                         title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
                     >
                         {darkMode ? (
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="5"/>
-                                <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-                                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                                <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-                                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                                <circle cx="12" cy="12" r="5" />
+                                <line x1="12" y1="1" x2="12" y2="3" />
+                                <line x1="12" y1="21" x2="12" y2="23" />
+                                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                                <line x1="1" y1="12" x2="3" y2="12" />
+                                <line x1="21" y1="12" x2="23" y2="12" />
+                                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
                             </svg>
                         ) : (
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
                             </svg>
                         )}
                     </button>
-                    <span style={{ color: "var(--color-ghost)" }}>{user.email}</span>
-                    <button 
-                        onClick={async () => {
-                            await api.post("/auth/logout")
-                            clearStoredAuthTokens()
-                            useAppStore.getState().setUser(null)
-                            navigate("/")
+                    <span style={{ fontSize: "13px", color: "var(--color-ghost)", maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {user.email}
+                    </span>
+                    <button
+                        onClick={handleLogout}
+                        style={{
+                            border: "1px solid var(--color-border)",
+                            background: "var(--color-base)",
+                            color: "var(--color-secondary)",
+                            borderRadius: "4px",
+                            padding: "4px 10px",
+                            fontSize: "11px",
+                            cursor: "pointer"
                         }}
-                        style={{ border: "1px solid var(--color-border)", background: "var(--color-base)", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", cursor: "pointer", color: "var(--color-secondary)" }}
                     >
                         logout
                     </button>
                 </div>
             </header>
 
-            {/* Main Content */}
-            <main style={{ flex: 1, display: "flex", maxWidth: "1200px", margin: "0 auto", width: "100%", padding: "32px 24px", gap: "32px" }}>
-                
-                {/* Left Sidebar (Profile & My Repos) */}
+            {error && (
+                <div style={{ maxWidth: "1200px", width: "100%", margin: "12px auto 0", padding: "0 24px", color: "var(--color-err, #e55)", fontSize: "12px" }}>
+                    {error}
+                </div>
+            )}
+
+            <main
+                style={{
+                    flex: 1,
+                    width: "100%",
+                    maxWidth: "1200px",
+                    margin: "0 auto",
+                    padding: "28px 24px 32px",
+                    display: "flex",
+                    gap: "24px"
+                }}
+            >
                 <aside style={{ width: "260px", flexShrink: 0 }}>
-                    <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "var(--color-surface)", border: "1px solid var(--color-border)", marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", color: "var(--color-ink)" }}>
-                        {user.email.charAt(0).toUpperCase()}
+                    <div
+                        style={{
+                            width: "80px",
+                            height: "80px",
+                            borderRadius: "50%",
+                            border: "1px solid var(--color-border)",
+                            background: "var(--color-surface)",
+                            marginBottom: "16px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "24px",
+                            color: "var(--color-ink)"
+                        }}
+                    >
+                        {user.email?.charAt(0).toUpperCase()}
                     </div>
-                    <h2 style={{ fontSize: "20px", fontWeight: 600, margin: "0 0 4px 0" }}>{user.email.split("@")[0]}</h2>
-                    <p style={{ fontSize: "14px", color: "var(--color-secondary)", margin: 0 }}>{user.email}</p>
-                    
-                    <hr style={{ border: 0, borderTop: "1px solid var(--color-border)", margin: "24px 0" }} />
-                    
-                    <h3 style={{ fontSize: "13px", fontWeight: 600, marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-ghost)" }}>
-                        {user.githubId ? "My GitHub Repos" : "Recent Analyses"}
+                    <h2 style={{ fontSize: "20px", fontWeight: 600, margin: "0 0 4px 0" }}>{user.email?.split("@")[0]}</h2>
+                    <p style={{ fontSize: "13px", color: "var(--color-secondary)", margin: 0 }}>{user.email}</p>
+
+                    <hr style={{ border: 0, borderTop: "1px solid var(--color-border)", margin: "22px 0" }} />
+
+                    <h3
+                        style={{
+                            fontSize: "12px",
+                            color: "var(--color-ghost)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            margin: "0 0 10px 0",
+                            fontWeight: 600
+                        }}
+                    >
+                        {user.githubId ? "My GitHub Repos" : "GitHub Repos"}
                     </h3>
 
-                    {user.githubId ? (
-                        /* Show GitHub Repos */
-                        isLoadingMyRepos ? (
-                            <div style={{ fontSize: "12px", color: "var(--color-ghost)" }}>Loading repositories...</div>
-                        ) : myRepos.length === 0 ? (
-                            <div style={{ fontSize: "12px", color: "var(--color-secondary)" }}>No public repositories found.</div>
-                        ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                                {myRepos.slice(0, 8).map(repo => (
-                                    <div 
-                                        key={repo.id} 
-                                        style={{ fontSize: "13px", color: "var(--color-ink)", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }} 
-                                        onClick={() => handleAnalyzeNew(null, repo.htmlUrl)}
-                                    >
-                                        <svg height="14" width="14" viewBox="0 0 16 16" fill="var(--color-ghost)"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 010-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 11-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z"></path></svg>
-                                        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{repo.name}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )
+                    {!user.githubId ? (
+                        <p style={{ fontSize: "12px", color: "var(--color-secondary)", lineHeight: 1.6, margin: 0 }}>
+                            Sign in with GitHub to load your personal repositories here.
+                        </p>
+                    ) : isLoadingMyRepos ? (
+                        <p style={{ fontSize: "12px", color: "var(--color-ghost)", margin: 0 }}>Loading repositories...</p>
+                    ) : myRepos.length === 0 ? (
+                        <p style={{ fontSize: "12px", color: "var(--color-secondary)", margin: 0 }}>No repositories found in your account.</p>
                     ) : (
-                        /* Fallback to History if strictly email login */
-                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                            {history.slice(0, 8).map(h => (
-                                <div key={h.sessionId} style={{ fontSize: "13px", color: "var(--color-ink)", cursor: "pointer" }} onClick={() => handleResume(h.sessionId)}>
-                                    {h.repoName}
-                                </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {myRepos.slice(0, SIDEBAR_REPO_LIMIT).map((repo) => (
+                                <button
+                                    key={repo.id}
+                                    onClick={() => handleAnalyzeNew(null, repo.htmlUrl)}
+                                    disabled={isAnalyzing}
+                                    style={{
+                                        border: "1px solid var(--color-border)",
+                                        background: "var(--color-surface)",
+                                        borderRadius: "8px",
+                                        padding: "10px",
+                                        textAlign: "left",
+                                        cursor: isAnalyzing ? "wait" : "pointer",
+                                        opacity: isAnalyzing ? 0.6 : 1
+                                    }}
+                                >
+                                    <div style={{ fontSize: "12px", color: "var(--color-ink)", fontWeight: 600, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {repo.fullName || repo.name}
+                                    </div>
+                                    <div style={{ fontSize: "11px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)" }}>
+                                        {repo.language || "Unknown"}
+                                    </div>
+                                </button>
                             ))}
                         </div>
                     )}
                 </aside>
 
-                {/* Main Feed */}
-                <section style={{ flex: 1, display: "flex", flexDirection: "column", gap: "32px" }}>
-                    
-                    {/* Trending Repositories Section */}
+                <section style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "24px" }}>
                     <div>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", borderBottom: "1px solid var(--color-border)", paddingBottom: "12px" }}>
-                            <div style={{ display: "flex", gap: "24px", alignItems: "center" }}>
-                                <h2 
+                            <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
+                                <button
                                     onClick={() => setActiveTab("top")}
-                                    style={{ 
-                                        fontSize: "16px", 
-                                        fontWeight: 600, 
-                                        margin: 0, 
-                                        cursor: "pointer",
-                                        color: activeTab === "top" ? "var(--color-ink)" : "var(--color-ghost)",
-                                        borderBottom: activeTab === "top" ? "2px solid var(--color-ink)" : "2px solid transparent",
-                                        paddingBottom: "13px",
-                                        marginBottom: "-13px" 
-                                    }}
+                                    style={tabButtonStyle(activeTab === "top")}
                                 >
-                                    Top Repos (All-time)
-                                </h2>
-                                <h2 
+                                    Top Repositories
+                                </button>
+                                <button
                                     onClick={() => setActiveTab("trending")}
-                                    style={{ 
-                                        fontSize: "16px", 
-                                        fontWeight: 600, 
-                                        margin: 0, 
-                                        cursor: "pointer",
-                                        color: activeTab === "trending" ? "var(--color-ink)" : "var(--color-ghost)",
-                                        borderBottom: activeTab === "trending" ? "2px solid var(--color-ink)" : "2px solid transparent",
-                                        paddingBottom: "13px",
-                                        marginBottom: "-13px"
-                                    }}
+                                    style={tabButtonStyle(activeTab === "trending")}
                                 >
-                                    Trending Repos (Recent)
-                                </h2>
+                                    Trending Repositories
+                                </button>
                             </div>
                         </div>
-                        
+
                         {isLoadingDisplayedRepos ? (
                             <div style={{ fontSize: "13px", color: "var(--color-ghost)" }}>Loading repositories...</div>
+                        ) : displayedRepos.length === 0 ? (
+                            <EmptyState text="No repositories available right now." />
                         ) : (
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
-                                {displayedRepos.map(repo => (
-                                    <div 
-                                        key={repo.id} 
-                                        onClick={() => handleAnalyzeNew(null, repo.htmlUrl)}
-                                        style={{ 
-                                            padding: "16px", 
-                                            border: "1px solid var(--color-border)", 
-                                            borderRadius: "8px", 
-                                            background: "var(--color-surface)",
-                                            cursor: "pointer",
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            transition: "border-color 0.15s, transform 0.15s",
-                                            position: "relative",
-                                            overflow: "hidden"
-                                        }}
-                                        onMouseEnter={e => {
-                                            e.currentTarget.style.borderColor = "var(--color-ink)"
-                                            e.currentTarget.style.transform = "translateY(-2px)"
-                                            e.currentTarget.style.boxShadow = "0 8px 16px rgba(0,0,0,0.03)"
-                                        }}
-                                        onMouseLeave={e => {
-                                            e.currentTarget.style.borderColor = "var(--color-border)"
-                                            e.currentTarget.style.transform = "translateY(0)"
-                                            e.currentTarget.style.boxShadow = "none"
-                                        }}
-                                    >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                            <img src={repo.ownerAvatar} alt="owner" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
-                                            <h3 style={{ fontSize: "14px", fontWeight: 600, margin: 0, color: "var(--color-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                                {repo.fullName}
-                                            </h3>
-                                        </div>
-                                        <p style={{ fontSize: "12px", color: "var(--color-prose)", margin: "0 0 16px 0", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", flex: 1 }}>
-                                            {repo.description || "No description provided."}
-                                        </p>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "11px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)" }}>
-                                            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                                <svg height="12" width="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"></path></svg>
-                                                {repo.stars.toLocaleString()}
-                                            </span>
-                                            {repo.language && (
-                                                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-secondary)", display: "inline-block" }} />
-                                                    {repo.language}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            <>
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
+                                    {visibleRepos.map((repo) => (
+                                        <RepoCard
+                                            key={repo.id}
+                                            repo={repo}
+                                            disabled={isAnalyzing}
+                                            onAnalyze={() => handleAnalyzeNew(null, repo.htmlUrl)}
+                                        />
+                                    ))}
+                                </div>
+
+                                {displayedRepos.length > REPOS_PER_PAGE && (
+                                    <PaginationRow
+                                        page={safeReposPage}
+                                        totalPages={totalRepoPages}
+                                        onChange={setReposPage}
+                                    />
+                                )}
+                            </>
                         )}
                     </div>
 
-
-                    {/* Recent Analyses Section */}
                     <div>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", borderBottom: "1px solid var(--color-border)", paddingBottom: "12px" }}>
                             <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>Recent Analyses</h2>
                         </div>
-                        
+
                         {isLoadingHistory ? (
                             <div style={{ fontSize: "13px", color: "var(--color-ghost)" }}>Loading history...</div>
                         ) : history.length === 0 ? (
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", border: "1px dashed var(--color-border)", borderRadius: "8px" }}>
-                                <p style={{ fontSize: "13px", color: "var(--color-secondary)", marginBottom: "8px" }}>You haven't analyzed any repositories yet.</p>
-                                <p style={{ fontSize: "11px", color: "var(--color-ghost)" }}>Click on a trending repository above to give it a try.</p>
-                            </div>
+                            <EmptyState text="You have not analyzed any repositories yet." subText="Pick a repository above to get started." />
                         ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                                {history.map(item => (
-                                    <div 
-                                        key={item.sessionId} 
-                                        onClick={() => handleResume(item.sessionId)}
-                                        style={{ 
-                                            padding: "16px", 
-                                            border: "1px solid var(--color-border)", 
-                                            borderRadius: "8px", 
-                                            background: "var(--color-surface)",
-                                            cursor: "pointer",
-                                            transition: "border-color 0.15s",
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.borderColor = "var(--color-ink)"}
-                                        onMouseLeave={e => e.currentTarget.style.borderColor = "var(--color-border)"}
-                                    >
-                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
-                                            <h3 style={{ fontSize: "15px", fontWeight: 600, margin: 0, color: "var(--color-ink)" }}>
-                                                {item.repoName}
-                                            </h3>
-                                            <span style={{ fontSize: "11px", color: "var(--color-ghost)" }}>
-                                                {new Date(item.createdAt).toLocaleDateString()}
-                                            </span>
-                                        </div>
-                                        <p style={{ fontSize: "13px", color: "var(--color-secondary)", margin: "0 0 12px 0", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                                            {item.summary || "No summary available."}
-                                        </p>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "16px", fontSize: "11px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)" }}>
-                                            {item.stats?.primaryLanguage && (
-                                                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-secondary)", display: "inline-block" }} />
-                                                    {item.stats.primaryLanguage}
+                            <>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                                    {visibleHistory.map((item) => (
+                                        <button
+                                            key={item.sessionId}
+                                            onClick={() => handleResume(item.sessionId)}
+                                            disabled={isAnalyzing}
+                                            style={{
+                                                border: "1px solid var(--color-border)",
+                                                background: "var(--color-surface)",
+                                                borderRadius: "8px",
+                                                textAlign: "left",
+                                                padding: "14px 16px",
+                                                cursor: isAnalyzing ? "wait" : "pointer",
+                                                opacity: isAnalyzing ? 0.65 : 1
+                                            }}
+                                        >
+                                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "10px", marginBottom: "6px" }}>
+                                                <h3 style={{ fontSize: "14px", margin: 0, color: "var(--color-ink)", fontWeight: 600 }}>{item.repoName || "Unknown repository"}</h3>
+                                                <span style={{ fontSize: "11px", color: "var(--color-ghost)", flexShrink: 0 }}>
+                                                    {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ""}
                                                 </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                                            </div>
+                                            <p style={{ margin: "0 0 10px 0", fontSize: "12px", color: "var(--color-secondary)", lineHeight: 1.5 }}>
+                                                {item.summary || "No summary available."}
+                                            </p>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "11px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)" }}>
+                                                <span>{item.stats?.primaryLanguage || "Unknown language"}</span>
+                                                {item.status && <span>{item.status}</span>}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {history.length > HISTORY_PER_PAGE && (
+                                    <PaginationRow
+                                        page={safeHistoryPage}
+                                        totalPages={totalHistoryPages}
+                                        onChange={setHistoryPage}
+                                    />
+                                )}
+                            </>
                         )}
                     </div>
                 </section>
             </main>
         </div>
     )
+}
+
+function RepoCard({ repo, onAnalyze, disabled }) {
+    return (
+        <button
+            onClick={onAnalyze}
+            disabled={disabled}
+            style={{
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)",
+                borderRadius: "8px",
+                padding: "16px",
+                textAlign: "left",
+                display: "flex",
+                flexDirection: "column",
+                cursor: disabled ? "wait" : "pointer",
+                minHeight: "140px",
+                opacity: disabled ? 0.7 : 1
+            }}
+        >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                {repo.ownerAvatar ? (
+                    <img src={repo.ownerAvatar} alt="owner" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
+                ) : (
+                    <span style={{ width: "20px", height: "20px", borderRadius: "50%", background: "var(--color-muted)", display: "inline-block" }} />
+                )}
+                <h3 style={{ margin: 0, fontSize: "14px", color: "var(--color-ink)", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {repo.fullName || repo.name || "Unknown repository"}
+                </h3>
+            </div>
+
+            <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "var(--color-prose)", lineHeight: 1.5, flex: 1 }}>
+                {repo.description || "No description provided."}
+            </p>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "11px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)" }}>
+                <span>{typeof repo.stars === "number" ? `${repo.stars.toLocaleString()} stars` : "No stars data"}</span>
+                <span>{repo.language || "Unknown"}</span>
+            </div>
+        </button>
+    )
+}
+
+function EmptyState({ text, subText }) {
+    return (
+        <div
+            style={{
+                border: "1px dashed var(--color-border)",
+                borderRadius: "8px",
+                padding: "36px 20px",
+                textAlign: "center",
+                color: "var(--color-secondary)",
+                background: "var(--color-surface)"
+            }}
+        >
+            <div style={{ fontSize: "13px", marginBottom: subText ? "6px" : 0 }}>{text}</div>
+            {subText && <div style={{ fontSize: "11px", color: "var(--color-ghost)" }}>{subText}</div>}
+        </div>
+    )
+}
+
+function PaginationRow({ page, totalPages, onChange }) {
+    const buttonStyle = {
+        border: "1px solid var(--color-border)",
+        background: "var(--color-surface)",
+        color: "var(--color-secondary)",
+        borderRadius: "6px",
+        padding: "4px 10px",
+        fontSize: "11px",
+        fontFamily: "var(--font-mono)",
+        cursor: "pointer"
+    }
+
+    return (
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", marginTop: "12px" }}>
+            <button
+                style={buttonStyle}
+                disabled={page <= 1}
+                onClick={() => onChange(Math.max(1, page - 1))}
+            >
+                Prev
+            </button>
+            <span style={{ minWidth: "66px", textAlign: "center", fontSize: "11px", color: "var(--color-ghost)" }}>
+                {page} / {totalPages}
+            </span>
+            <button
+                style={buttonStyle}
+                disabled={page >= totalPages}
+                onClick={() => onChange(Math.min(totalPages, page + 1))}
+            >
+                Next
+            </button>
+        </div>
+    )
+}
+
+function tabButtonStyle(active) {
+    return {
+        border: "none",
+        background: "transparent",
+        padding: "0 0 8px 0",
+        margin: 0,
+        fontSize: "15px",
+        fontWeight: 600,
+        cursor: "pointer",
+        color: active ? "var(--color-ink)" : "var(--color-ghost)",
+        borderBottom: active ? "2px solid var(--color-ink)" : "2px solid transparent"
+    }
 }

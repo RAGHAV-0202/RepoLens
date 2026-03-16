@@ -37,6 +37,8 @@ const useAppStore = create((set, get) => ({
 
     // loading
     isAnalyzing: false,
+    analyzeProgress: 0,
+    analyzeStage: "",
     isRestoring: false,
     authChecked: false,
 
@@ -67,6 +69,8 @@ const useAppStore = create((set, get) => ({
         selectedFile: null,
         fileExplanation: "",
         rawFileContent: null,
+        analyzeProgress: 0,
+        analyzeStage: "",
     }),
 
     selectFile: (file) => set({ selectedFile: file, fileExplanation: "", rawFileContent: null }),
@@ -79,6 +83,8 @@ const useAppStore = create((set, get) => ({
     setActiveOverviewTab: (tab) => set({ activeOverviewTab: tab }),
     setSidebarView: (view) => set({ sidebarView: view }),
     setIsAnalyzing: (v) => set({ isAnalyzing: v }),
+    setAnalyzeProgress: (v) => set({ analyzeProgress: v }),
+    setAnalyzeStage: (v) => set({ analyzeStage: v }),
     setIsRestoring: (v) => set({ isRestoring: v }),
     setIsExplainingFile: (v) => set({ isExplainingFile: v }),
     setIsFetchingRaw: (v) => set({ isFetchingRaw: v }),
@@ -120,6 +126,8 @@ const useAppStore = create((set, get) => ({
         isFetchingRaw: false,
         chatHistory: [],
         isAnalyzing: false,
+        analyzeProgress: 0,
+        analyzeStage: "",
         isRestoring: false,
         activeOverviewTab: "repo",
         sidebarView: "files",
