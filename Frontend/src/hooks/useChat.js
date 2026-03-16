@@ -1,8 +1,7 @@
 import { useCallback, useRef } from "react"
 import useAppStore from "../store/useAppStore"
 import { restoreSessionIfNeeded, isSessionExpiredError } from "../services/restoreSession"
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api"
+import { API_BASE_URL } from "../services/api"
 
 export default function useChat() {
     const isSendingRef = useRef(false)
@@ -21,7 +20,7 @@ export default function useChat() {
         }
 
         try {
-            const response = await fetch(`${API_URL}/chat`, {
+            const response = await fetch(`${API_BASE_URL}/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",

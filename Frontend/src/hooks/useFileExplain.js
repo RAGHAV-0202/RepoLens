@@ -1,8 +1,7 @@
 import { useCallback, useRef } from "react"
 import useAppStore from "../store/useAppStore"
 import { restoreSessionIfNeeded, isSessionExpiredError } from "../services/restoreSession"
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api"
+import { API_BASE_URL } from "../services/api"
 
 export default function useFileExplain() {
     const abortRef = useRef(null)
@@ -16,7 +15,7 @@ export default function useFileExplain() {
         useAppStore.setState({ isExplainingFile: true, fileExplanation: "", isFetchingRaw: true, rawFileContent: null })
 
         // kick off raw file fetch concurrently
-        fetch(`${API_URL}/analyze/raw?sessionId=${encodeURIComponent(sessionId)}&filePath=${encodeURIComponent(filePath)}`, {
+        fetch(`${API_BASE_URL}/analyze/raw?sessionId=${encodeURIComponent(sessionId)}&filePath=${encodeURIComponent(filePath)}`, {
             credentials: "include",
             signal: controller.signal
         })
@@ -44,7 +43,7 @@ export default function useFileExplain() {
 
         try {
             const response = await fetch(
-                `${API_URL}/analyze/file?sessionId=${encodeURIComponent(sessionId)}&filePath=${encodeURIComponent(filePath)}`,
+                `${API_BASE_URL}/analyze/file?sessionId=${encodeURIComponent(sessionId)}&filePath=${encodeURIComponent(filePath)}`,
                 { credentials: "include", signal: controller.signal }
             )
 

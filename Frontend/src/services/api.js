@@ -1,10 +1,10 @@
 import axios from "axios"
 
-const url = "https://api.repolens.xyz/api"
-// const url = "http://localhost:4000/api"
+const defaultApiUrl = "https://api.repolens.xyz/api"
+export const API_BASE_URL = import.meta.env.VITE_API_URL || defaultApiUrl
 
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || url ,
+    baseURL: API_BASE_URL,
     withCredentials: true,
 })
 
@@ -18,7 +18,7 @@ api.interceptors.response.use(
 
             try {
                 await axios.post(
-                    `${import.meta.env.VITE_API_URL || url}/auth/refresh`,
+                    `${API_BASE_URL}/auth/refresh`,
                     {},
                     { withCredentials: true }
                 )
