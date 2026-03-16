@@ -20,8 +20,24 @@ app.use(express.static("public"))
 app.use(cookieParser())
 
 
+const allowedOrigins = new Set([
+  "http://localhost:5173",
+  "https://repolens.xyz",
+  "https://www.repolens.xyz",
+])
+
 const corsOptions = {
-    origin: ['http://localhost:5173' , "https://repolens.xyz" , "https://www.repolens.xyz"],
+  origin: (origin, callback) => {
+    // Allow non-browser tools (no Origin header) and known local/prod frontends.
+    if (!origin) return callback(null, true)
+
+    const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)
+    if (isLocalhost || allowedOrigins.has(origin)) {
+      return callback(null, true)
+    }
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`))
+  },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
     credentials: true,

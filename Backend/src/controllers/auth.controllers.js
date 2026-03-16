@@ -5,11 +5,23 @@ import User from "../models/user.model.js"
 import jwt from "jsonwebtoken"
 import axios from "axios"
 
-const cookieOptions = {
+const cookieBaseOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "Strict",
+    path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+}
+
+function getCookieOptions(req) {
+    const forwardedProto = req.headers["x-forwarded-proto"]
+    const isHttps = req.secure || forwardedProto === "https"
+
+    // Cross-site localhost -> hosted API auth requires SameSite=None + Secure.
+    // Local HTTP development cannot use Secure cookies, so fall back to Lax.
+    return {
+        ...cookieBaseOptions,
+        secure: isHttps,
+        sameSite: isHttps ? "None" : "Lax",
+    }
 }
 
 export const register = asyncHandler(async (req, res, next) => {
@@ -29,6 +41,7 @@ export const register = asyncHandler(async (req, res, next) => {
 
     const accessToken = user.generateAccessToken()
     const refreshToken = user.generateRefreshToken()
+    const cookieOptions = getCookieOptions(req)
 
     return res
         .status(201)
@@ -53,6 +66,7 @@ export const login = asyncHandler(async (req, res, next) => {
 
     const accessToken = user.generateAccessToken()
     const refreshToken = user.generateRefreshToken()
+    const cookieOptions = getCookieOptions(req)
 
     return res
         .status(200)
@@ -81,6 +95,7 @@ export const refreshAccessToken = asyncHandler(async (req, res, next) => {
         }
 
         const accessToken = user.generateAccessToken()
+        const cookieOptions = getCookieOptions(req)
 
         return res
             .status(200)
@@ -92,6 +107,7 @@ export const refreshAccessToken = asyncHandler(async (req, res, next) => {
 })
 
 export const logout = asyncHandler(async (req, res, next) => {
+    const cookieOptions = getCookieOptions(req)
     return res
         .status(200)
         .clearCookie("accessToken", cookieOptions)
@@ -167,6 +183,7 @@ export const githubCallback = asyncHandler(async (req, res, next) => {
     // 5. Generate RepoLens JWTs
     const jwtAccessToken = user.generateAccessToken()
     const jwtRefreshToken = user.generateRefreshToken()
+    const cookieOptions = getCookieOptions(req)
 
     // 6. Set cookies and redirect to the frontend dashboard
     res.cookie("accessToken", jwtAccessToken, cookieOptions)
