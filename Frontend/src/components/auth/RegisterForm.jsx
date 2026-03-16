@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import api from "../../services/api"
+import api, { setStoredAuthTokens } from "../../services/api"
 import useAppStore from "../../store/useAppStore"
 
 export default function RegisterForm() {
@@ -21,7 +21,9 @@ export default function RegisterForm() {
         setLoading(true)
         try {
             const res = await api.post("/auth/register", { email, password })
-            setUser(res.data.data)
+            const payload = res.data?.data || {}
+            setStoredAuthTokens(payload)
+            setUser(payload.user || payload)
             navigate("/")
         } catch (err) {
             setError(err.response?.data?.message || "registration failed")

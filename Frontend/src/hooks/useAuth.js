@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import api from "../services/api"
+import api, { clearStoredAuthTokens } from "../services/api"
 import useAppStore from "../store/useAppStore"
 
 export default function useAuth() {
@@ -12,6 +12,7 @@ export default function useAuth() {
                 setUser(res.data.data)
             })
             .catch(() => {
+                clearStoredAuthTokens()
                 setUser(null)
             })
             .finally(() => {

@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react"
 import useAppStore from "../store/useAppStore"
 import { restoreSessionIfNeeded, isSessionExpiredError } from "../services/restoreSession"
-import { API_BASE_URL } from "../services/api"
+import { API_BASE_URL, getAuthHeaders } from "../services/api"
 
 export default function useChat() {
     const isSendingRef = useRef(false)
@@ -22,7 +22,7 @@ export default function useChat() {
         try {
             const response = await fetch(`${API_BASE_URL}/chat`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                 credentials: "include",
                 body: JSON.stringify({
                     sessionId,

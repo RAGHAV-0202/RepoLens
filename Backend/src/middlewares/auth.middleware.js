@@ -4,7 +4,12 @@ import User from "../models/user.model.js"
 import asyncHandler from "../utils/asyncHandler.js"
 
 export const verifyJWT = asyncHandler(async (req, res, next) => {
-    const token = req.cookies?.accessToken
+    const cookieToken = req.cookies?.accessToken
+    const authHeader = req.headers.authorization || req.headers.Authorization
+    const bearerToken = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+        ? authHeader.slice(7).trim()
+        : null
+    const token = cookieToken || bearerToken
 
     if (!token)
         throw new apiError(401, "Unauthorized")

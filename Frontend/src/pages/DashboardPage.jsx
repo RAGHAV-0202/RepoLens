@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import useAppStore from "../store/useAppStore"
 import useAnalyze from "../hooks/useAnalyze"
-import api from "../services/api"
+import api, { clearStoredAuthTokens } from "../services/api"
 
 export default function DashboardPage() {
     const navigate = useNavigate()
@@ -169,6 +169,7 @@ export default function DashboardPage() {
                     <button 
                         onClick={async () => {
                             await api.post("/auth/logout")
+                            clearStoredAuthTokens()
                             useAppStore.getState().setUser(null)
                             navigate("/")
                         }}

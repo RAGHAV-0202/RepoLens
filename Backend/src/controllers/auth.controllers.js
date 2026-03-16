@@ -47,7 +47,11 @@ export const register = asyncHandler(async (req, res, next) => {
         .status(201)
         .cookie("accessToken", accessToken, cookieOptions)
         .cookie("refreshToken", refreshToken, cookieOptions)
-        .json(new ApiResponse(201, { email: user.email, id: user._id, githubId: user.githubId }, "Registered successfully"))
+        .json(new ApiResponse(201, {
+            user: { email: user.email, id: user._id, githubId: user.githubId },
+            accessToken,
+            refreshToken
+        }, "Registered successfully"))
 })
 
 export const login = asyncHandler(async (req, res, next) => {
@@ -72,11 +76,15 @@ export const login = asyncHandler(async (req, res, next) => {
         .status(200)
         .cookie("accessToken", accessToken, cookieOptions)
         .cookie("refreshToken", refreshToken, cookieOptions)
-        .json(new ApiResponse(200, { email: user.email, id: user._id, githubId: user.githubId }, "Logged in successfully"))
+        .json(new ApiResponse(200, {
+            user: { email: user.email, id: user._id, githubId: user.githubId },
+            accessToken,
+            refreshToken
+        }, "Logged in successfully"))
 })
 
 export const refreshAccessToken = asyncHandler(async (req, res, next) => {
-    const incomingRefreshToken = req.cookies.refreshToken
+    const incomingRefreshToken = req.cookies.refreshToken || req.body?.refreshToken
 
     if (!incomingRefreshToken) {
         throw new apiError(401, "Unauthorized access")
