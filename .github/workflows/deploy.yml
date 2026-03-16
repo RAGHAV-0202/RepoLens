@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -18,28 +21,27 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy
+      - name: Create deploy script
         run: |
-          ssh -o StrictHostKeyChecking=no \
-              -o BatchMode=yes \
-              -i ~/.ssh/deploy_key \
-              ubuntu@${{ secrets.EC2_HOST }} bash -s << 'ENDSSH'
-            echo "Home is: $HOME"
-            echo "PWD is: $(pwd)"
-            ls /home/ubuntu/
-            ls /home/ubuntu/RepoLens/
-          ENDSSH
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          echo "📦 Pulling latest code..."
+          cd ~/RepoLens/Backend
+          git reset --hard HEAD
+          git pull origin main
+          echo "📥 Installing dependencies..."
+          npm install --production
+          echo "♻️ Reloading app..."
+          pm2 reload index --update-env || pm2 start index.js --name index
+          echo "✅ Deployment complete!"
+          pm2 status
+          EOF
 
-      - name: Verify
+      - name: Copy and run deploy script
         run: |
-          sleep 5
+          scp -i ~/.ssh/deploy_key deploy.sh ubuntu@${{ secrets.EC2_HOST }}:~/deploy.sh
           ssh -o StrictHostKeyChecking=no \
-              -o BatchMode=yes \
               -i ~/.ssh/deploy_key \
-              ubuntu@${{ secrets.EC2_HOST }} bash -s << 'ENDSSH'
-            pm2 describe index | grep -E "status|restart|uptime"
-          ENDSSH
-
-      - name: Notify Failure
-        if: failure()
-        run: echo "❌ Deployment failed! Check logs above."
+              ubuntu@${{ secrets.EC2_HOST }} \
+              "bash ~/deploy.sh"
