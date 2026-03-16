@@ -8,6 +8,8 @@ import analyzeRouter from "./routes/analyze.routes.js"
 import chatRouter from "./routes/chat.routes.js"
 import authRouter from "./routes/auth.routes.js"
 import githubRouter from "./routes/github.routes.js"
+import asyncHandler from "./utils/asyncHandler.js"
+import ApiResponse from "./utils/apiResponse.js"
 
 const app = express();
 
@@ -28,10 +30,27 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+async function getStats(){
+  const startTime = Date.now();
+  const result = await mongoose.connection.db.command({ ping: 1 });
+  const endTime = Date.now();
+  const latency = endTime - startTime;
 
-app.get("/", (req, res) => {
-    res.status(200).send("Server is Live")
+  const isMongoConnected = mongoose.connection.readyState === 1;
+  const statusInfo = {
+    status: "OK",
+    mongoDB: isMongoConnected ? "Connected" : "Disconnected",
+    latency: latency + "ms",
+    timestamp: new Date(),
+  };
+  return statusInfo
+}
+
+app.get("/" , async(req,res)=>{
+  const statusInfo = await getStats()
+  res.status(200).json(new ApiResponse(200 , statusInfo , "Server is live"))
 })
+
 
 app.use("/api/analyze", analyzeRouter)
 app.use("/api/chat", chatRouter)
