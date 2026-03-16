@@ -21,7 +21,7 @@ app.use(cookieParser())
 
 
 const corsOptions = {
-    origin: ['http://localhost:5173' , "https://repolens.xyz"],
+    origin: ['http://localhost:5173' , "https://repolens.xyz" , "https://www.repolens.xyz"],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
     credentials: true,
