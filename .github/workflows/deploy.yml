@@ -23,11 +23,11 @@ jobs:
 
       - name: Create deploy script
         run: |
-          cat > deploy.sh << 'EOF'
+          cat > /tmp/deploy.sh << 'EOF'
           #!/bin/bash
           set -e
           echo "📦 Pulling latest code..."
-          cd ~/RepoLens/Backend
+          cd /home/ubuntu/RepoLens/Backend
           git reset --hard HEAD
           git pull origin main
           echo "📥 Installing dependencies..."
@@ -37,11 +37,18 @@ jobs:
           echo "✅ Deployment complete!"
           pm2 status
           EOF
+          chmod +x /tmp/deploy.sh
 
-      - name: Copy and run deploy script
+      - name: Copy deploy script to EC2
         run: |
-          scp -i ~/.ssh/deploy_key deploy.sh ubuntu@${{ secrets.EC2_HOST }}:~/deploy.sh
+          scp -o StrictHostKeyChecking=no \
+              -i ~/.ssh/deploy_key \
+              /tmp/deploy.sh \
+              ubuntu@${{ secrets.EC2_HOST }}:/tmp/deploy.sh
+
+      - name: Run deploy script on EC2
+        run: |
           ssh -o StrictHostKeyChecking=no \
               -i ~/.ssh/deploy_key \
               ubuntu@${{ secrets.EC2_HOST }} \
-              "bash ~/deploy.sh"
+              "bash /tmp/deploy.sh"
