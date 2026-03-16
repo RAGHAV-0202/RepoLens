@@ -20,35 +20,29 @@ jobs:
 
       - name: Deploy
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            echo "🚀 Starting deployment..."
+          ssh -o StrictHostKeyChecking=no \
+              -o BatchMode=yes \
+              -i ~/.ssh/deploy_key \
+              ubuntu@${{ secrets.EC2_HOST }} \
+              "cd ~/RepoLens/Backend && \
+               echo '📦 Pulling latest code...' && \
+               git reset --hard HEAD && \
+               git pull origin main && \
+               echo '📥 Installing dependencies...' && \
+               npm install --production && \
+               echo '♻️ Reloading app...' && \
+               pm2 reload index --update-env && \
+               echo '✅ Done!' && \
+               pm2 status"
 
-            cd ~/RepoLens/Backend
-
-            echo "📦 Pulling latest code..."
-            git reset --hard HEAD
-            git pull origin main
-
-            echo "📥 Installing dependencies..."
-            npm install --production
-
-            echo "♻️ Reloading app..."
-            pm2 reload index --update-env
-
-            echo "✅ Deployment complete!"
-            pm2 status
-          EOF
-
-      - name: Verify Deployment
+      - name: Verify
         run: |
           sleep 5
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            pm2 describe index | grep -E "status|restart|uptime"
-          EOF
-
-      - name: Notify Success
-        if: success()
-        run: echo "✅ RepoLens Backend deployed successfully!"
+          ssh -o StrictHostKeyChecking=no \
+              -o BatchMode=yes \
+              -i ~/.ssh/deploy_key \
+              ubuntu@${{ secrets.EC2_HOST }} \
+              "pm2 describe index | grep -E 'status|restart|uptime'"
 
       - name: Notify Failure
         if: failure()
