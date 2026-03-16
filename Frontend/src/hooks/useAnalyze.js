@@ -9,6 +9,10 @@ export default function useAnalyze() {
     const navigate = useNavigate()
 
     const analyze = useCallback(async (repoUrl) => {
+        const normalizedUrl = repoUrl?.trim()
+        if (!normalizedUrl) return
+        if (useAppStore.getState().isAnalyzing) return
+
         setIsAnalyzing(true)
         try {
             const user = useAppStore.getState().user
@@ -21,10 +25,10 @@ export default function useAnalyze() {
 
                 const mockData = {
                     sessionId: "guest-mock-session",
-                    repoName: repoUrl.split("/").pop(),
-                    repoUrl: repoUrl,
+                    repoName: normalizedUrl.split("/").pop(),
+                    repoUrl: normalizedUrl,
                     tree: { name: "src", type: "tree", children: [{ name: "index.js", type: "blob", size: 1024 }] },
-                    summary: "This is a simulated analysis for unauthenticated users. Please sign in to view the full deep-dive architectural breakdown of " + repoUrl.split("/").pop() + ".",
+                    summary: "This is a simulated analysis for unauthenticated users. Please sign in to view the full deep-dive architectural breakdown of " + normalizedUrl.split("/").pop() + ".",
                     stats: { totalFiles: 42, totalLines: 1337, primaryLanguage: "JavaScript", languages: { JavaScript: 100 } },
                     architecture: { "Core": "Handles main logic" },
                     suggestions: ["Sign in to view real suggestions"],
@@ -39,10 +43,10 @@ export default function useAnalyze() {
             }
 
             // Normal authenticated flow
-            const res = await api.post("/analyze", { repoUrl })
+            const res = await api.post("/analyze", { repoUrl: normalizedUrl })
             const elapsed = ((Date.now() - start) / 1000).toFixed(1)
             const data = res.data.data
-            setAnalysis({ ...data, repoUrl, analyzeTime: elapsed })
+            setAnalysis({ ...data, repoUrl: normalizedUrl, analyzeTime: elapsed })
             useAppStore.setState({ analyzeTime: elapsed })
             navigate(`/app?session=${data.sessionId}`)
         } catch (err) {

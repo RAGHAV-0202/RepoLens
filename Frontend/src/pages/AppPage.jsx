@@ -36,9 +36,12 @@ export default function AppPage() {
     }, [sessionId, searchParams, setSearchParams])
 
     useEffect(() => {
-        if (urlSessionId && !sessionId && !useAppStore.getState().isAnalyzing) {
-            // Page loaded/refreshed with ?session=<id> — resume from DB
-            useAppStore.getState().setIsAnalyzing(true)
+        const store = useAppStore.getState()
+        const needsResume = Boolean(urlSessionId) && sessionId !== urlSessionId
+
+        if (needsResume && !store.isAnalyzing) {
+            // URL session differs from store session (or page was refreshed): resume target session.
+            store.setIsAnalyzing(true)
             api.get(`/analyze/resume?sessionId=${urlSessionId}`)
                 .then(res => {
                     if (res.data?.success) {
@@ -53,7 +56,10 @@ export default function AppPage() {
                 .finally(() => {
                     useAppStore.getState().setIsAnalyzing(false)
                 })
-        } else if (!urlSessionId && !sessionId && !useAppStore.getState().isAnalyzing) {
+            return
+        }
+
+        if (!urlSessionId && !sessionId && !store.isAnalyzing) {
             navigate("/dashboard", { replace: true })
         }
     }, [urlSessionId, sessionId, navigate, setAnalysis])

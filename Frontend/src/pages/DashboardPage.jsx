@@ -73,6 +73,7 @@ export default function DashboardPage() {
 
     const handleAnalyzeNew = async (e, directUrl = null) => {
         if (e) e.preventDefault()
+        if (isAnalyzing) return
         setError("")
 
         const urlToAnalyze = directUrl || repoUrl.trim()
@@ -86,6 +87,7 @@ export default function DashboardPage() {
     }
 
     const handleResume = (sessionId) => {
+        if (isAnalyzing) return
         navigate(`/app?session=${sessionId}`)
     }
 
