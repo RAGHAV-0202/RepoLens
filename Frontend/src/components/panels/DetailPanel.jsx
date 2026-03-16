@@ -1,5 +1,6 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import useAppStore from "../../store/useAppStore"
+import useFileExplain from "../../hooks/useFileExplain"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
 
@@ -18,12 +19,29 @@ function getLanguageFromPath(path) {
 
 export default function DetailPanel() {
     const selectedFile = useAppStore((s) => s.selectedFile)
+    const selectFile = useAppStore((s) => s.selectFile)
+    const sessionId = useAppStore((s) => s.sessionId)
+    const repoName = useAppStore((s) => s.repoName)
+    const tree = useAppStore((s) => s.tree)
+    const summary = useAppStore((s) => s.summary)
+    const architecture = useAppStore((s) => s.architecture)
+    const stats = useAppStore((s) => s.stats)
     const fileExplanation = useAppStore((s) => s.fileExplanation)
     const isExplaining = useAppStore((s) => s.isExplainingFile)
     const rawFileContent = useAppStore((s) => s.rawFileContent)
     const isFetchingRaw = useAppStore((s) => s.isFetchingRaw)
+    const { explain } = useFileExplain()
 
     const [activeTab, setActiveTab] = useState("explain")
+
+    const keyModules = useMemo(
+        () => getKeyModules(architecture, tree),
+        [architecture, tree]
+    )
+    const keyFolders = useMemo(() => getTopFolders(tree, 8), [tree])
+    const mainFeatures = useMemo(() => inferMainFeatures(summary), [summary])
+    const startHereFiles = useMemo(() => getStartHereFiles(tree), [tree])
+    const inferredStack = useMemo(() => inferStack(tree, stats), [tree, stats])
 
     // reset tab when file changes
     const prevFile = useAppStore(s => s.previousSelectedFile)
@@ -32,10 +50,118 @@ export default function DetailPanel() {
         setActiveTab("explain")
     }
 
+    const openFileFromGuide = (file) => {
+        if (!file) return
+        selectFile({ name: file.name, path: file.path, ext: file.ext, badge: file.badge })
+        if (sessionId) explain(sessionId, file.path)
+    }
+
     if (!selectedFile) {
         return (
-            <div className="detail" style={{ alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: "11px", color: "var(--color-ghost)" }}>select a file to analyze</span>
+            <div className="detail">
+                <div className="detail-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div className="breadcrumb">
+                        <b>{repoName || "Repository"}</b> / quick understanding
+                    </div>
+                    <div className="kind-tag" style={{ marginTop: 0 }}>START HERE</div>
+                </div>
+
+                <div className="detail-body">
+                    <div className="section">
+                        <div className="section-label">Architecture Overview</div>
+                        <div className="ov-card" style={{ marginBottom: 0 }}>
+                            <div className="kv">
+                                <div className="kv-k">frontend</div>
+                                <div className="kv-v">{inferredStack.frontend}</div>
+                            </div>
+                            <div className="kv">
+                                <div className="kv-k">backend</div>
+                                <div className="kv-v">{inferredStack.backend}</div>
+                            </div>
+                            <div className="kv">
+                                <div className="kv-k">database</div>
+                                <div className="kv-v">{inferredStack.database}</div>
+                            </div>
+                            <div className="kv">
+                                <div className="kv-k">language</div>
+                                <div className="kv-v">{stats?.primaryLanguage || "Unknown"}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="section">
+                        <div className="section-label">Main Features</div>
+                        <div className="ov-card" style={{ marginBottom: 0 }}>
+                            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {mainFeatures.map((item, i) => (
+                                    <li key={i} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                                        <span style={{ color: "var(--color-ghost)", marginTop: "2px" }}>•</span>
+                                        <span className="ov-prose" style={{ display: "inline" }}>{item}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="section">
+                        <div className="section-label">Key Modules</div>
+                        <div className="ov-card" style={{ marginBottom: 0 }}>
+                            <div className="pills">
+                                {keyModules.map((m) => (
+                                    <span key={m} className="pill pill-a">{m}</span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="section">
+                        <div className="section-label">Key Folders</div>
+                        <div className="ov-card" style={{ marginBottom: 0 }}>
+                            <div className="pills">
+                                {keyFolders.map((folder) => (
+                                    <span key={folder} className="pill pill-c">{folder}</span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="section" style={{ marginBottom: 0 }}>
+                        <div className="section-label">Start Here Guide</div>
+                        <div className="ov-card" style={{ marginBottom: 0 }}>
+                            <div className="ov-prose" style={{ marginBottom: "10px" }}>
+                                Open these files first to understand the project flow quickly.
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                                {startHereFiles.map((file) => (
+                                    <button
+                                        key={file.path}
+                                        onClick={() => openFileFromGuide(file)}
+                                        style={{
+                                            border: "1px solid var(--color-border)",
+                                            background: "var(--color-base)",
+                                            color: "var(--color-ink)",
+                                            borderRadius: "6px",
+                                            padding: "6px 10px",
+                                            fontSize: "11px",
+                                            lineHeight: 1.2,
+                                        }}
+                                    >
+                                        {file.path}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {summary && (
+                        <div className="section" style={{ marginTop: "18px", marginBottom: 0 }}>
+                            <div className="section-label">Repository Summary</div>
+                            <div className="prose">
+                                <FormattedProse text={summary} />
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
         )
     }
@@ -285,4 +411,125 @@ function InlineFormat({ text }) {
             })}
         </>
     )
+}
+
+function flattenFiles(node, acc = []) {
+    if (!node) return acc
+    if (node.type === "file") {
+        acc.push(node)
+        return acc
+    }
+    if (node.children?.length) {
+        for (const child of node.children) {
+            flattenFiles(child, acc)
+        }
+    }
+    return acc
+}
+
+function getTopFolders(tree, limit = 6) {
+    if (!tree?.children) return []
+    return tree.children
+        .filter((n) => n.type === "directory")
+        .map((n) => n.name)
+        .slice(0, limit)
+}
+
+function getKeyModules(architecture, tree) {
+    const fromArchitecture = architecture && typeof architecture === "object"
+        ? Object.keys(architecture)
+            .filter((k) => !["pattern", "entryPoint", "configFile"].includes(k))
+            .slice(0, 8)
+        : []
+
+    if (fromArchitecture.length > 0) return fromArchitecture
+
+    const preferred = ["auth", "controllers", "services", "routes", "models", "utils", "middlewares", "components"]
+    const folderSet = new Set(getTopFolders(tree, 20).map((f) => f.toLowerCase()))
+    const picked = preferred.filter((p) => folderSet.has(p)).map((p) => p)
+    if (picked.length > 0) return picked.slice(0, 8)
+
+    return getTopFolders(tree, 8)
+}
+
+function getStartHereFiles(tree) {
+    const files = flattenFiles(tree, [])
+    if (files.length === 0) return []
+
+    const scored = files.map((f) => {
+        const lower = f.name.toLowerCase()
+        const depth = (f.path.match(/\//g) || []).length
+        let score = 0
+
+        if (lower === "readme.md") score += 300
+        if (f.badge === "entry") score += 220
+        if (f.badge === "config") score += 160
+        if (["package.json", "main.py", "app.js", "index.js", "main.ts", "server.js", "dockerfile", "pyproject.toml"].includes(lower)) score += 140
+        if (["routes", "controller", "service", "model", "app", "main", "index"].some(k => lower.includes(k))) score += 60
+        score += Math.max(0, 24 - depth * 4)
+
+        return { ...f, score }
+    })
+
+    scored.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+
+    const unique = []
+    const seen = new Set()
+    for (const file of scored) {
+        if (seen.has(file.path)) continue
+        seen.add(file.path)
+        unique.push(file)
+        if (unique.length >= 6) break
+    }
+
+    return unique
+}
+
+function inferMainFeatures(summary) {
+    if (!summary || typeof summary !== "string") {
+        return [
+            "Repository architecture and module responsibilities",
+            "Primary execution flow from entry points",
+            "Key configuration and integration points",
+        ]
+    }
+
+    const cleaned = summary
+        .replace(/\*\*/g, "")
+        .replace(/`/g, "")
+        .trim()
+
+    const bullets = cleaned
+        .split(/\n+/)
+        .map((l) => l.replace(/^[-*•]\s*/, "").trim())
+        .filter((l) => l.length > 18)
+
+    const candidates = bullets.length > 0
+        ? bullets
+        : cleaned
+            .split(/[.;]\s+/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 18)
+
+    return candidates.slice(0, 4)
+}
+
+function inferStack(tree, stats) {
+    const folders = getTopFolders(tree, 20).map((f) => f.toLowerCase())
+
+    const detect = (aliases) => {
+        const hit = folders.find((f) => aliases.some((a) => f.includes(a)))
+        return hit || null
+    }
+
+    const front = detect(["frontend", "client", "web", "ui", "app"])
+    const back = detect(["backend", "server", "api"])
+    const data = detect(["database", "db", "model", "models", "mongo", "prisma", "schema", "migration"])
+
+    return {
+        frontend: front ? `Detected from folder: ${front}` : "Not obvious from folder structure",
+        backend: back ? `Detected from folder: ${back}` : "Not obvious from folder structure",
+        database: data ? `Detected from folder: ${data}` : "Not obvious from folder structure",
+        language: stats?.primaryLanguage || "Unknown",
+    }
 }
