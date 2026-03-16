@@ -17,7 +17,7 @@ export default function useAnalyze() {
 
         setIsAnalyzing(true)
         setAnalyzeProgress(6)
-        setAnalyzeStage("Validating repository URL...")
+        setAnalyzeStage("Preparing repository download...")
 
         const ticker = setInterval(() => {
             const { analyzeProgress } = useAppStore.getState()
@@ -27,9 +27,9 @@ export default function useAnalyze() {
             const next = Math.min(94, analyzeProgress + step)
             setAnalyzeProgress(next)
 
-            if (next < 28) setAnalyzeStage("Cloning repository...")
+            if (next < 28) setAnalyzeStage("Downloading repository snapshot...")
             else if (next < 62) setAnalyzeStage("Indexing files and dependencies...")
-            else if (next < 88) setAnalyzeStage("Generating architecture summary...")
+            else if (next < 88) setAnalyzeStage("Generating architecture insights...")
             else setAnalyzeStage("Finalizing analysis...")
         }, 650)
 

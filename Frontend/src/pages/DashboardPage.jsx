@@ -235,42 +235,15 @@ export default function DashboardPage() {
                         >
                             {isAnalyzing ? "Analyzing..." : "Analyze"}
                         </button>
-                    </form>
 
-                    {isAnalyzing && (
-                        <div style={{ width: "240px", flexShrink: 0 }}>
-                            <div
-                                style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    fontSize: "10px",
-                                    color: "var(--color-ghost)",
-                                    marginBottom: "4px"
-                                }}
-                            >
-                                <span>{analyzeStage || "Processing..."}</span>
-                                <span>{Math.max(0, Math.min(100, Math.round(analyzeProgress)))}%</span>
-                            </div>
-                            <div
-                                style={{
-                                    height: "6px",
-                                    borderRadius: "999px",
-                                    background: "var(--color-muted)",
-                                    border: "1px solid var(--color-border)",
-                                    overflow: "hidden"
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        height: "100%",
-                                        width: `${Math.max(0, Math.min(100, analyzeProgress))}%`,
-                                        background: "linear-gradient(90deg, var(--color-core-text), var(--color-ink))",
-                                        transition: "width 0.45s ease"
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
+                        {isAnalyzing && (
+                            <AnalyzeProgressWidget
+                                active={isAnalyzing}
+                                progress={analyzeProgress}
+                                stage={analyzeStage}
+                            />
+                        )}
+                    </form>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
@@ -375,7 +348,7 @@ export default function DashboardPage() {
                             Sign in with GitHub to load your personal repositories here.
                         </p>
                     ) : isLoadingMyRepos ? (
-                        <p style={{ fontSize: "12px", color: "var(--color-ghost)", margin: 0 }}>Loading repositories...</p>
+                        <SidebarRepoSkeleton count={6} />
                     ) : myRepos.length === 0 ? (
                         <p style={{ fontSize: "12px", color: "var(--color-secondary)", margin: 0 }}>No repositories found in your account.</p>
                     ) : (
@@ -427,7 +400,7 @@ export default function DashboardPage() {
                         </div>
 
                         {isLoadingDisplayedRepos ? (
-                            <div style={{ fontSize: "13px", color: "var(--color-ghost)" }}>Loading repositories...</div>
+                            <RepoGridSkeleton count={REPOS_PER_PAGE} />
                         ) : displayedRepos.length === 0 ? (
                             <EmptyState text="No repositories available right now." />
                         ) : (
@@ -460,7 +433,7 @@ export default function DashboardPage() {
                         </div>
 
                         {isLoadingHistory ? (
-                            <div style={{ fontSize: "13px", color: "var(--color-ghost)" }}>Loading history...</div>
+                            <HistorySkeletonList count={HISTORY_PER_PAGE} />
                         ) : history.length === 0 ? (
                             <EmptyState text="You have not analyzed any repositories yet." subText="Pick a repository above to get started." />
                         ) : (
@@ -510,6 +483,49 @@ export default function DashboardPage() {
                     </div>
                 </section>
             </main>
+        </div>
+    )
+}
+
+function AnalyzeProgressWidget({ active, progress, stage }) {
+    const normalized = Math.max(0, Math.min(100, Math.round(progress || 0)))
+    const currentStage = stage || (active ? "Starting analysis..." : "")
+
+    return (
+        <div
+            title={currentStage}
+            style={{
+                width: "240px",
+                flexShrink: 0,
+                marginLeft: "10px"
+            }}
+        >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+                <span style={{ fontSize: "10px", color: "var(--color-ghost)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "200px" }}>
+                    {currentStage}
+                </span>
+                <span style={{ fontSize: "10px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)" }}>{normalized}%</span>
+            </div>
+
+            <div
+                style={{
+                    height: "8px",
+                    borderRadius: "999px",
+                    background: "var(--color-muted)",
+                    border: "1px solid var(--color-border)",
+                    overflow: "hidden",
+                    marginBottom: "6px"
+                }}
+            >
+                <div
+                    style={{
+                        height: "100%",
+                        width: `${normalized}%`,
+                        background: "linear-gradient(90deg, var(--color-core-text), var(--color-ink))",
+                        transition: "width 0.45s ease"
+                    }}
+                />
+            </div>
         </div>
     )
 }
@@ -569,6 +585,104 @@ function EmptyState({ text, subText }) {
         >
             <div style={{ fontSize: "13px", marginBottom: subText ? "6px" : 0 }}>{text}</div>
             {subText && <div style={{ fontSize: "11px", color: "var(--color-ghost)" }}>{subText}</div>}
+        </div>
+    )
+}
+
+function SkeletonBlock({ height = "12px", width = "100%", radius = "6px", style = {} }) {
+    return (
+        <div
+            style={{
+                height,
+                width,
+                borderRadius: radius,
+                background: "linear-gradient(90deg, var(--color-muted) 25%, var(--color-surface) 50%, var(--color-muted) 75%)",
+                backgroundSize: "200% 100%",
+                animation: "reposkeleton 1.2s ease-in-out infinite",
+                ...style
+            }}
+        />
+    )
+}
+
+function RepoGridSkeleton({ count = 6 }) {
+    return (
+        <>
+            <style>{"@keyframes reposkeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }"}</style>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
+                {Array.from({ length: count }).map((_, index) => (
+                    <div
+                        key={`repo-skeleton-${index}`}
+                        style={{
+                            border: "1px solid var(--color-border)",
+                            background: "var(--color-surface)",
+                            borderRadius: "8px",
+                            padding: "16px",
+                            minHeight: "140px",
+                            display: "flex",
+                            flexDirection: "column"
+                        }}
+                    >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                            <SkeletonBlock height="20px" width="20px" radius="999px" />
+                            <SkeletonBlock height="14px" width="70%" />
+                        </div>
+                        <SkeletonBlock height="11px" width="95%" style={{ marginBottom: "6px" }} />
+                        <SkeletonBlock height="11px" width="80%" style={{ marginBottom: "12px" }} />
+                        <div style={{ marginTop: "auto", display: "flex", gap: "12px" }}>
+                            <SkeletonBlock height="11px" width="80px" />
+                            <SkeletonBlock height="11px" width="70px" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </>
+    )
+}
+
+function HistorySkeletonList({ count = 5 }) {
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            {Array.from({ length: count }).map((_, index) => (
+                <div
+                    key={`history-skeleton-${index}`}
+                    style={{
+                        border: "1px solid var(--color-border)",
+                        background: "var(--color-surface)",
+                        borderRadius: "8px",
+                        padding: "14px 16px"
+                    }}
+                >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+                        <SkeletonBlock height="14px" width="45%" />
+                        <SkeletonBlock height="11px" width="70px" />
+                    </div>
+                    <SkeletonBlock height="11px" width="95%" style={{ marginBottom: "6px" }} />
+                    <SkeletonBlock height="11px" width="75%" style={{ marginBottom: "10px" }} />
+                    <SkeletonBlock height="11px" width="90px" />
+                </div>
+            ))}
+        </div>
+    )
+}
+
+function SidebarRepoSkeleton({ count = 6 }) {
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {Array.from({ length: count }).map((_, index) => (
+                <div
+                    key={`sidebar-skeleton-${index}`}
+                    style={{
+                        border: "1px solid var(--color-border)",
+                        background: "var(--color-surface)",
+                        borderRadius: "8px",
+                        padding: "10px"
+                    }}
+                >
+                    <SkeletonBlock height="12px" width="85%" style={{ marginBottom: "6px" }} />
+                    <SkeletonBlock height="10px" width="45%" />
+                </div>
+            ))}
         </div>
     )
 }
