@@ -2,6 +2,7 @@
 
 **Understand any codebase in seconds, not hours** — AI-powered repository intelligence that combines architecture analysis, interactive visualization, and conversational AI.
 
+
 ## What It Does
 
 RepoLens is a full-stack web application that analyzes GitHub repositories using LLM capabilities. Users can:
