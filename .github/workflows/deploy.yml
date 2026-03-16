@@ -10,27 +10,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      - name: Debug secrets
+      - name: Setup SSH key
         run: |
-          echo "Host: ${{ secrets.EC2_HOST }}"
-          echo "User: ${{ secrets.EC2_USER }}"
-          if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then
-            echo "SSH KEY IS EMPTY"
-          else
-            echo "SSH KEY EXISTS"
-          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          debug : true
-          script: |
+      - name: Deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             cd ~/RepoLens/Backend
             git reset --hard HEAD
             git pull origin main
             npm install
             pm2 reload index
+          EOF
