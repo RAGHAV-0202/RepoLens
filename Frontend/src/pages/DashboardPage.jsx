@@ -8,6 +8,34 @@ const REPOS_PER_PAGE = 6
 const HISTORY_PER_PAGE = 5
 const SIDEBAR_REPO_LIMIT = 8
 
+// Client-side cache TTL: 10 minutes
+const CLIENT_TRENDING_CACHE_TTL_MS = 10 * 60 * 1000
+const TRENDING_CACHE_KEY = "repolens_trending_repos"
+const TOP_CACHE_KEY = "repolens_top_repos"
+
+function getClientCachedRepos(key) {
+    try {
+        const raw = sessionStorage.getItem(key)
+        if (!raw) return null
+        const { repos, expiresAt } = JSON.parse(raw)
+        if (Date.now() > expiresAt) {
+            sessionStorage.removeItem(key)
+            return null
+        }
+        return repos
+    } catch {
+        return null
+    }
+}
+
+function setClientCachedRepos(key, repos) {
+    try {
+        sessionStorage.setItem(key, JSON.stringify({ repos, expiresAt: Date.now() + CLIENT_TRENDING_CACHE_TTL_MS }))
+    } catch (err) {
+        console.warn("Failed to cache repos in sessionStorage:", err)
+    }
+}
+
 export default function DashboardPage() {
     const navigate = useNavigate()
     const user = useAppStore((s) => s.user)
@@ -54,27 +82,45 @@ export default function DashboardPage() {
                 if (!cancelled) setIsLoadingHistory(false)
             })
 
-        api.get("/github/trending?type=trending")
-            .then((res) => {
-                if (!cancelled && res.data?.success) {
-                    setTrendingRepos(Array.isArray(res.data.data) ? res.data.data : [])
-                }
-            })
-            .catch((err) => console.error("Failed to load trending repositories:", err))
-            .finally(() => {
-                if (!cancelled) setIsLoadingTrending(false)
-            })
+        // Use client-side cache for trending repos to reduce API calls and avoid rate limits
+        const cachedTrending = getClientCachedRepos(TRENDING_CACHE_KEY)
+        if (cachedTrending) {
+            setTrendingRepos(cachedTrending)
+            setIsLoadingTrending(false)
+        } else {
+            api.get("/github/trending?type=trending")
+                .then((res) => {
+                    if (!cancelled && res.data?.success) {
+                        const repos = Array.isArray(res.data.data) ? res.data.data : []
+                        setTrendingRepos(repos)
+                        setClientCachedRepos(TRENDING_CACHE_KEY, repos)
+                    }
+                })
+                .catch((err) => console.error("Failed to load trending repositories:", err))
+                .finally(() => {
+                    if (!cancelled) setIsLoadingTrending(false)
+                })
+        }
 
-        api.get("/github/trending?type=top")
-            .then((res) => {
-                if (!cancelled && res.data?.success) {
-                    setTopRepos(Array.isArray(res.data.data) ? res.data.data : [])
-                }
-            })
-            .catch((err) => console.error("Failed to load top repositories:", err))
-            .finally(() => {
-                if (!cancelled) setIsLoadingTop(false)
-            })
+        // Use client-side cache for top repos to reduce API calls and avoid rate limits
+        const cachedTop = getClientCachedRepos(TOP_CACHE_KEY)
+        if (cachedTop) {
+            setTopRepos(cachedTop)
+            setIsLoadingTop(false)
+        } else {
+            api.get("/github/trending?type=top")
+                .then((res) => {
+                    if (!cancelled && res.data?.success) {
+                        const repos = Array.isArray(res.data.data) ? res.data.data : []
+                        setTopRepos(repos)
+                        setClientCachedRepos(TOP_CACHE_KEY, repos)
+                    }
+                })
+                .catch((err) => console.error("Failed to load top repositories:", err))
+                .finally(() => {
+                    if (!cancelled) setIsLoadingTop(false)
+                })
+        }
 
         if (user.githubId) {
             api.get("/github/my-repos")

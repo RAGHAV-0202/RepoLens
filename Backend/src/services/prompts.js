@@ -8,7 +8,8 @@ Respond in this exact JSON format, nothing else:
   "architecture": {
     "pattern": "e.g. MVC, microservices, encoder-decoder, CLI tool",
     "entryPoint": "main file or command to run the project",
-    "configFile": "primary config file"
+    "configFile": "primary config file",
+    "startGuide": "1-2 sentence practical guide on how to install dependencies and run the project locally"
   },
   "suggestions": [
     { "type": "error",   "text": "specific issue found" },

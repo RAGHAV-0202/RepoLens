@@ -107,6 +107,19 @@ function RepoTab({ stats, summary, architecture, tree }) {
 
     const techStack = tree ? inferTechStack(tree) : []
 
+    // Build sorted language entries for display
+    const languageEntries = stats?.languages
+        ? (() => {
+            const raw = stats.languages instanceof Map
+                ? [...stats.languages.entries()]
+                : Object.entries(stats.languages)
+            return raw
+                .filter(([, pct]) => typeof pct === "number" && pct >= 1)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 6)
+        })()
+        : []
+
     return (
         <>
             {/* stat grid */}
@@ -169,7 +182,7 @@ function RepoTab({ stats, summary, architecture, tree }) {
             )}
 
             {/* architecture */}
-            {architecture && (architecture.pattern || architecture.entryPoint || architecture.configFile) && (
+            {architecture && (architecture.pattern || architecture.entryPoint || architecture.configFile || architecture.startGuide || languageEntries.length > 0) && (
                 <div className="ov-card">
                     <div className="ov-card-title">Architecture</div>
                     {architecture.pattern && (
@@ -188,6 +201,38 @@ function RepoTab({ stats, summary, architecture, tree }) {
                         <div className="kv">
                             <div className="kv-k">config</div>
                             <div className="kv-v">{architecture.configFile}</div>
+                        </div>
+                    )}
+
+                    {/* languages breakdown */}
+                    {languageEntries.length > 0 && (
+                        <div style={{ marginTop: "10px" }}>
+                            <div className="kv-k" style={{ marginBottom: "6px" }}>languages</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                                {languageEntries.map(([lang, pct]) => (
+                                    <div key={lang} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                        <span style={{ width: "80px", fontSize: "10px", color: "var(--color-secondary)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
+                                            {lang}
+                                        </span>
+                                        <div style={{ flex: 1, height: "5px", borderRadius: "999px", background: "var(--color-muted)", overflow: "hidden" }}>
+                                            <div style={{ height: "100%", width: `${Math.min(100, Math.max(0, pct))}%`, background: "var(--color-ink)", borderRadius: "999px" }} />
+                                        </div>
+                                        <span style={{ width: "34px", textAlign: "right", fontSize: "10px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)" }}>
+                                            {pct}%
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* getting started guide */}
+                    {architecture.startGuide && (
+                        <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--color-border)" }}>
+                            <div className="kv-k" style={{ marginBottom: "5px" }}>getting started</div>
+                            <div className="ov-prose" style={{ fontSize: "11px" }}>
+                                <FormattedProse text={architecture.startGuide} />
+                            </div>
                         </div>
                     )}
                 </div>
