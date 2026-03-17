@@ -15,10 +15,6 @@ function flattenFiles(node, acc = []) {
     return acc
 }
 
-function listHasPath(files, matcher) {
-    return files.some((f) => matcher((f.path || "").toLowerCase(), (f.name || "").toLowerCase()))
-}
-
 function pickPaths(files, matcher, limit = 3) {
     return files
         .filter((f) => matcher((f.path || "").toLowerCase(), (f.name || "").toLowerCase()))
@@ -198,25 +194,19 @@ export default function FlowPanel() {
         source: "heuristic",
     })
 
+    const pkg = useMemo(
+        () => files.find((f) => (f.name || "").toLowerCase() === "package.json"),
+        [files]
+    )
+    const req = useMemo(
+        () => files.find((f) => (f.name || "").toLowerCase() === "requirements.txt"),
+        [files]
+    )
+
     useEffect(() => {
-        if (!sessionId || files.length === 0) return
-
-        const pkg = files.find((f) => (f.name || "").toLowerCase() === "package.json")
-        const req = files.find((f) => (f.name || "").toLowerCase() === "requirements.txt")
-
-        if (!pkg && !req) {
-            setDepScan({
-                loading: false,
-                score: 72,
-                risks: [{ level: "info", text: "No standard dependency manifest found" }],
-                packages: [],
-                source: "heuristic",
-            })
-            return
-        }
+        if (!sessionId || files.length === 0 || (!pkg && !req)) return
 
         let cancelled = false
-        setDepScan((s) => ({ ...s, loading: true }))
 
         const fetchRaw = async (filePath) => {
             const res = await fetch(`${API_BASE_URL}/analyze/raw?sessionId=${encodeURIComponent(sessionId)}&filePath=${encodeURIComponent(filePath)}`, {
@@ -259,9 +249,19 @@ export default function FlowPanel() {
         return () => {
             cancelled = true
         }
-    }, [sessionId, files, fileNames])
+    }, [sessionId, files, fileNames, pkg, req])
 
-    const quality = useMemo(() => calcQuality(files, stats, depScan.score), [files, stats, depScan.score])
+    const depScanView = (!pkg && !req)
+        ? {
+            loading: false,
+            score: 72,
+            risks: [{ level: "info", text: "No standard dependency manifest found" }],
+            packages: [],
+            source: "heuristic",
+        }
+        : depScan
+
+    const quality = useMemo(() => calcQuality(files, stats, depScanView.score), [files, stats, depScanView.score])
 
     const openPath = (path) => {
         const file = files.find((f) => f.path === path)
@@ -305,31 +305,31 @@ export default function FlowPanel() {
 
             <div className="ov-card" style={{ marginBottom: 12 }}>
                 <div className="ov-card-title">Dependency Risk & Outdated Scan</div>
-                {depScan.loading ? (
+                {depScanView.loading ? (
                     <div className="ov-prose">scanning dependency manifests...</div>
                 ) : (
                     <>
                         <div style={{ fontSize: 12, marginBottom: 8, color: "var(--color-secondary)" }}>
-                            hygiene score: <b style={{ color: "var(--color-ink)" }}>{depScan.score}</b>
-                            {depScan.source ? <span style={{ color: "var(--color-ghost)" }}> · source: {depScan.source}</span> : null}
+                            hygiene score: <b style={{ color: "var(--color-ink)" }}>{depScanView.score}</b>
+                            {depScanView.source ? <span style={{ color: "var(--color-ghost)" }}> · source: {depScanView.source}</span> : null}
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 8 }}>
-                            {depScan.risks.length === 0 ? (
+                            {depScanView.risks.length === 0 ? (
                                 <div className="ov-prose">No major dependency risk signals detected.</div>
-                            ) : depScan.risks.map((r, i) => (
+                            ) : depScanView.risks.map((r, i) => (
                                 <div key={i} style={{ display: "flex", gap: 8 }}>
                                     <RiskDot level={r.level} />
                                     <div className="ov-prose">{r.text}</div>
                                 </div>
                             ))}
                         </div>
-                        {depScan.packages.length > 0 && (
+                        {depScanView.packages.length > 0 && (
                             <div>
                                 <div style={{ fontSize: 10, color: "var(--color-ghost)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                                     sample packages
                                 </div>
                                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {depScan.packages.map((p) => (
+                                    {depScanView.packages.map((p) => (
                                         <span key={`${p.name}:${p.version}`} className="pill pill-c" style={{ fontFamily: "var(--font-mono)" }}>
                                             {p.name}@{p.version}
                                         </span>
