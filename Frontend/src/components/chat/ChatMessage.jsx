@@ -247,10 +247,66 @@ function Inline({ text, onCitationClick }) {
                     )
                 }
 
-                return <span key={i}>{part}</span>
+                return (
+                    <span key={i}>
+                        {renderTextWithAutoCitations(part, onCitationClick, `plain-${i}`)}
+                    </span>
+                )
             })}
         </>
     )
+}
+
+function renderTextWithAutoCitations(text, onCitationClick, keyPrefix = "c") {
+    if (!text) return null
+
+    const nodes = []
+    let lastIndex = 0
+
+    const re = /`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s*\((?:line|lines)\s*(\d+)(?:\s*[-–]\s*(\d+))?\)|`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)#L(\d+)(?:-L?(\d+))?`?/g
+    let m
+
+    while ((m = re.exec(text)) !== null) {
+        if (m.index > lastIndex) {
+            nodes.push(<span key={`${keyPrefix}-t-${lastIndex}`}>{text.slice(lastIndex, m.index)}</span>)
+        }
+
+        const pathA = m[1]
+        const startA = m[2]
+        const endA = m[3]
+        const pathB = m[4]
+        const startB = m[5]
+        const endB = m[6]
+
+        const path = pathA || pathB
+        const start = Number(startA || startB)
+        const end = Number(endA || endB || start)
+
+        if (path && Number.isFinite(start) && start > 0) {
+            const target = `${normalizeRepoPath(path)}#L${start}${end > start ? `-L${end}` : ""}`
+            nodes.push(
+                <button
+                    key={`${keyPrefix}-c-${m.index}`}
+                    type="button"
+                    className="chat-citation"
+                    onClick={() => onCitationClick?.(target)}
+                    title="Open cited file and jump to lines"
+                >
+                    {m[0].replace(/`/g, "")}
+                </button>
+            )
+        } else {
+            nodes.push(<span key={`${keyPrefix}-f-${m.index}`}>{m[0]}</span>)
+        }
+
+        lastIndex = re.lastIndex
+    }
+
+    if (lastIndex < text.length) {
+        nodes.push(<span key={`${keyPrefix}-tail`}>{text.slice(lastIndex)}</span>)
+    }
+
+    return nodes.length > 0 ? nodes : text
 }
 
 function isCitationTarget(target) {
