@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from "react-router-dom"
+import { useEffect } from "react"
+import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import useAppStore from "./store/useAppStore"
 import useAuth from "./hooks/useAuth"
 import LandingPage from "./pages/LandingPage"
@@ -8,6 +9,19 @@ import DashboardPage from "./pages/DashboardPage"
 import SharePage from "./pages/SharePage"
 import LoginForm from "./components/auth/LoginForm"
 import RegisterForm from "./components/auth/RegisterForm"
+
+const BASE_TITLE = "RepoLens"
+
+function getRouteTitle(pathname) {
+    if (pathname === "/") return `Understand Codebases Fast | ${BASE_TITLE}`
+    if (pathname === "/login") return `Sign In | ${BASE_TITLE}`
+    if (pathname === "/register") return `Create Account | ${BASE_TITLE}`
+    if (pathname === "/dashboard") return `Dashboard | ${BASE_TITLE}`
+    if (pathname === "/app") return `Analysis Workspace | ${BASE_TITLE}`
+    if (pathname === "/history") return `History | ${BASE_TITLE}`
+    if (pathname.startsWith("/share/")) return `Shared Analysis | ${BASE_TITLE}`
+    return BASE_TITLE
+}
 
 function ProtectedRoute({ children }) {
     const user = useAppStore((s) => s.user)
@@ -27,6 +41,11 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
     useAuth()
+    const location = useLocation()
+
+    useEffect(() => {
+        document.title = getRouteTitle(location.pathname)
+    }, [location.pathname])
 
     return (
         <Routes>
