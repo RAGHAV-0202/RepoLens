@@ -40,38 +40,26 @@ function ChatMarkdown({ text }) {
                 const lines = block.content.split("\n").filter((l) => l.trim() !== "")
 
                 // detect markdown table
-                const isTable = lines.length >= 2 &&
-                    lines.every((l) => l.trim().startsWith("|")) &&
-                    lines.some((l) => /^\|[\s-:|]+\|$/.test(l.trim()))
-
-                if (isTable) {
-                    const dataRows = lines.filter((l) => !/^\|[\s-:|]+\|$/.test(l.trim()))
-                    const headerRow = dataRows[0]
-                    const bodyRows = dataRows.slice(1)
-
-                    const parseCells = (row) =>
-                        row.split("|").slice(1, -1).map((c) => c.trim())
-
-                    const headers = parseCells(headerRow)
-
+                const table = parseMarkdownTable(lines)
+                if (table) {
                     return (
-                        <table className="fn-table" key={bi} style={{ margin: "8px 0" }}>
+                        <div className="chat-table-wrap" key={bi}>
+                            <table className="chat-table">
                             <thead>
                                 <tr>
-                                    {headers.map((h, hi) => (
-                                        <td key={hi} className="fn-name" style={{ fontWeight: 600 }}>
+                                    {table.headers.map((h, hi) => (
+                                        <th key={hi} className="chat-th">
                                             <Inline text={h} />
-                                        </td>
+                                        </th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {bodyRows.map((row, ri) => {
-                                    const cells = parseCells(row)
+                                {table.rows.map((cells, ri) => {
                                     return (
                                         <tr key={ri}>
                                             {cells.map((cell, ci) => (
-                                                <td key={ci} className={ci === 0 ? "fn-name" : "fn-desc"}>
+                                                <td key={ci} className={ci === 0 ? "chat-td chat-td-key" : "chat-td"}>
                                                     <Inline text={cell} />
                                                 </td>
                                             ))}
@@ -79,7 +67,8 @@ function ChatMarkdown({ text }) {
                                     )
                                 })}
                             </tbody>
-                        </table>
+                            </table>
+                        </div>
                     )
                 }
 
@@ -162,6 +151,36 @@ function splitBlocks(text) {
     return blocks
 }
 
+    function parseMarkdownTable(lines) {
+        if (!Array.isArray(lines) || lines.length < 2) return null
+
+        const raw = lines.map((l) => l.trim()).filter(Boolean)
+        const separatorIndex = raw.findIndex((line, idx) => idx > 0 && isMarkdownSeparatorRow(line))
+        if (separatorIndex <= 0) return null
+
+        const headerLine = raw[separatorIndex - 1]
+        if (!headerLine.includes("|")) return null
+
+        const headers = splitTableCells(headerLine)
+        if (headers.length === 0) return null
+
+        const rowLines = raw.slice(separatorIndex + 1).filter((line) => line.includes("|"))
+        const rows = rowLines.map(splitTableCells).filter((cells) => cells.length > 0)
+
+        return { headers, rows }
+    }
+
+    function isMarkdownSeparatorRow(line) {
+        const cells = splitTableCells(line)
+        if (cells.length === 0) return false
+        return cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")))
+    }
+
+    function splitTableCells(line) {
+        const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "")
+        if (!trimmed.includes("|")) return []
+        return trimmed.split("|").map((c) => c.trim())
+    }
 /** Render **bold** and `code` inline */
 function Inline({ text }) {
     const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)

@@ -53,6 +53,8 @@ export const chat = asyncHandler(async (req, res, next) => {
 function findRelevantFiles(message, tree) {
     const messageLower = message.toLowerCase()
 
+    const isApiQuestion = /\b(api|endpoint|endpoints|route|routes|router|auth|analyze|chat|github)\b/.test(messageLower)
+
     // extract keywords — strip common words
     const stopWords = new Set(["what", "where", "how", "does", "is", "the",
         "a", "an", "in", "of", "to", "and", "or", "for", "this", "that",
@@ -63,7 +65,7 @@ function findRelevantFiles(message, tree) {
         .split(/\s+/)
         .filter(w => w.length > 2 && !stopWords.has(w))
 
-    if (keywords.length === 0) return []
+    if (keywords.length === 0 && !isApiQuestion) return []
 
     // flatten tree into file list
     const allFiles = []
@@ -95,13 +97,21 @@ function findRelevantFiles(message, tree) {
         if (file.badge === "entry") score += 3
         if (file.badge === "config") score += 1
 
+        // API/endpoint questions should prioritize route + app bootstrap files.
+        if (isApiQuestion) {
+            if (pathLower.includes("/routes/")) score += 20
+            if (pathLower.endsWith("app.js") || pathLower.endsWith("server.js")) score += 12
+            if (/auth\.routes\.|analyze\.routes\.|chat\.routes\.|github\.routes\./.test(nameLower)) score += 20
+            if (nameLower.includes("route")) score += 6
+        }
+
         return { path: file.path, score }
     })
 
-    // return top 4 with score > 0
+    // return top 8 with score > 0 (more context for route-map style questions)
     return scored
         .filter(f => f.score > 0)
         .sort((a, b) => b.score - a.score)
-        .slice(0, 4)
+        .slice(0, 8)
         .map(f => f.path)
 }
