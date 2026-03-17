@@ -9,6 +9,7 @@ import OverviewPanel from "../components/panels/OverviewPanel"
 import ChatPanel from "../components/chat/ChatPanel"
 import RepoTreemap from "../components/panels/RepoTreemap"
 import DependencyGraph from "../components/panels/DependencyGraph"
+import FlowPanel from "../components/panels/FlowPanel"
 
 const MIN_SIDEBAR = 160
 const MAX_SIDEBAR = 400
@@ -125,7 +126,7 @@ export default function AppPage() {
 
                 <div className="main">
                     <div className="panels-row">
-                        {sidebarView === "graph" ? <RepoTreemap /> : sidebarView === "deps" ? <DependencyGraph /> : <DetailPanel />}
+                        {sidebarView === "graph" ? <RepoTreemap /> : sidebarView === "deps" ? <DependencyGraph /> : sidebarView === "flow" ? <FlowPanel /> : <DetailPanel />}
                         <OverviewPanel />
                     </div>
                     <ChatPanel />

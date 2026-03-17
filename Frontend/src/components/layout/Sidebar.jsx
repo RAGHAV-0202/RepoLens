@@ -12,7 +12,7 @@ export default function Sidebar({ width }) {
                     className={`view-btn ${sidebarView === "files" ? "on" : ""}`}
                     onClick={() => setSidebarView("files")}
                 >
-                    files
+                    tree
                 </button>
                 <button
                     className={`view-btn ${sidebarView === "graph" ? "on" : ""}`}
@@ -25,6 +25,12 @@ export default function Sidebar({ width }) {
                     onClick={() => setSidebarView("deps")}
                 >
                     deps
+                </button>
+                <button
+                    className={`view-btn ${sidebarView === "flow" ? "on" : ""}`}
+                    onClick={() => setSidebarView("flow")}
+                >
+                    flow
                 </button>
             </div>
 
