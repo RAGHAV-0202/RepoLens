@@ -1,16 +1,91 @@
-# React + Vite
+# RepoLens Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend application for RepoLens, built with React + Vite.
 
-Currently, two official plugins are available:
+RepoLens helps users understand repositories quickly with:
+- AI-generated repository summaries and architecture hints
+- Interactive analysis workspace
+- File-level explanations with code view
+- Repo-aware chat with markdown rendering (lists, tables, inline code, fenced code blocks)
+- Shareable public analysis pages
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+- React 19
+- React Router 7
+- Zustand (global app state)
+- Axios (API client with token refresh)
+- React Syntax Highlighter
+- Vite 7
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Routes
 
-## Expanding the ESLint configuration
+| Route | Purpose |
+| --- | --- |
+| / | Landing page |
+| /login | Sign in |
+| /register | Sign up |
+| /dashboard | User dashboard (protected) |
+| /app?session=<id> | Analysis workspace |
+| /history | Analysis history (protected) |
+| /share/:sessionId | Public shared analysis |
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Environment
+
+Create a `.env` file in the `Frontend` directory:
+
+```env
+VITE_API_URL=http://localhost:4000/api
+```
+
+If `VITE_API_URL` is not set, the frontend uses:
+
+`https://api.repolens.xyz/api`
+
+## Scripts
+
+```bash
+npm install
+npm run dev
+npm run build
+npm run preview
+npm run lint
+```
+
+## Local Development
+
+1. Start backend first (default expected API: `http://localhost:4000/api`).
+2. Start frontend:
+
+```bash
+cd Frontend
+npm install
+npm run dev
+```
+
+3. Open the Vite URL shown in terminal (typically `http://localhost:5173`).
+
+## Folder Layout
+
+```text
+src/
+	App.jsx
+	main.jsx
+	index.css
+	pages/
+	components/
+		auth/
+		chat/
+		layout/
+		panels/
+		tree/
+	hooks/
+	services/
+	store/
+```
+
+## Notes
+
+- Authenticated endpoints use bearer token headers and automatic refresh fallback.
+- Dark mode preference is persisted in local storage.
+- Browser page titles are route-aware (set in `src/App.jsx`).

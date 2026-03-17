@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import useAppStore from "../../store/useAppStore"
 import useFileExplain from "../../hooks/useFileExplain"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
@@ -33,6 +33,9 @@ export default function DetailPanel() {
     const { explain } = useFileExplain()
 
     const [activeTab, setActiveTab] = useState("explain")
+    const citationStart = Number(selectedFile?.lineStart)
+    const citationEnd = Number(selectedFile?.lineEnd || selectedFile?.lineStart)
+    const hasCitationTarget = Number.isFinite(citationStart) && citationStart > 0
 
     const keyModules = useMemo(
         () => getKeyModules(architecture, tree),
@@ -48,8 +51,29 @@ export default function DetailPanel() {
     const prevFile = useAppStore(s => s.previousSelectedFile)
     if (selectedFile !== prevFile) {
         useAppStore.setState({ previousSelectedFile: selectedFile })
-        setActiveTab("explain")
+        setActiveTab(selectedFile?.preferredTab === "code" ? "code" : "explain")
     }
+
+    useEffect(() => {
+        if (!selectedFile?.path || !hasCitationTarget) return
+        if (activeTab !== "code" || isFetchingRaw || !rawFileContent) return
+
+        const timer = window.setTimeout(() => {
+            const el = document.getElementById(`code-line-${citationStart}`)
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" })
+            }
+        }, 40)
+
+        return () => window.clearTimeout(timer)
+    }, [
+        activeTab,
+        citationStart,
+        hasCitationTarget,
+        isFetchingRaw,
+        rawFileContent,
+        selectedFile?.path,
+    ])
 
     const openFileFromGuide = (file) => {
         if (!file) return
@@ -225,6 +249,19 @@ export default function DetailPanel() {
             <div className="detail-body" style={activeTab === "code" ? { padding: 0, backgroundColor: "#1e1e1e" } : {}}>
                 {activeTab === "code" ? (
                     <div style={{ height: "100%", overflow: "auto" }}>
+                        {hasCitationTarget && (
+                            <div style={{
+                                padding: "8px 12px",
+                                borderBottom: "1px solid var(--color-border)",
+                                background: "var(--color-surface)",
+                                color: "var(--color-ghost)",
+                                fontFamily: "var(--font-mono)",
+                                fontSize: "10.5px"
+                            }}>
+                                Jumped to lines L{citationStart}{citationEnd > citationStart ? `-L${citationEnd}` : ""}
+                            </div>
+                        )}
+
                         {isFetchingRaw ? (
                             <div style={{ padding: "20px", color: "var(--color-faint)", fontSize: "11px", fontFamily: "var(--font-mono)" }}>
                                 Loading code...
@@ -235,6 +272,17 @@ export default function DetailPanel() {
                                 style={vscDarkPlus}
                                 customStyle={{ margin: 0, padding: "20px", fontSize: "12.5px", background: "transparent", lineHeight: 1.5 }}
                                 showLineNumbers
+                                wrapLines
+                                lineProps={(lineNumber) => {
+                                    const inRange = hasCitationTarget && lineNumber >= citationStart && lineNumber <= citationEnd
+                                    return {
+                                        id: `code-line-${lineNumber}`,
+                                        style: inRange ? {
+                                            display: "block",
+                                            background: "rgba(244, 193, 0, 0.16)",
+                                        } : { display: "block" }
+                                    }
+                                }}
                             >
                                 {rawFileContent || "// no content"}
                             </SyntaxHighlighter>

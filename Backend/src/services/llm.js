@@ -199,9 +199,21 @@ function buildChatContext(contextFiles, repoName) {
 
     let ctx = `Repository: ${repoName}\n\nRelevant files:\n`
     for (const [filePath, { content }] of Object.entries(contextFiles)) {
-        ctx += `\n--- ${filePath} ---\n${content.slice(0, 3000)}\n`
+        ctx += `\n--- ${filePath} ---\n${numberedSnippet(content)}\n`
     }
     return ctx
+}
+
+function numberedSnippet(content, maxChars = 3500, maxLines = 220) {
+    const safe = typeof content === "string" ? content : ""
+    const clipped = safe.slice(0, maxChars)
+    const lines = clipped.split("\n").slice(0, maxLines)
+    const numbered = lines
+        .map((line, i) => `${String(i + 1).padStart(4, " ")} | ${line}`)
+        .join("\n")
+
+    const wasTruncated = safe.length > maxChars || safe.split("\n").length > maxLines
+    return wasTruncated ? `${numbered}\n... [truncated]` : numbered
 }
 
 
