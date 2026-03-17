@@ -66,67 +66,86 @@ function ChatMarkdown({ text, onCitationClick }) {
                     )
                 }
 
-                const lines = block.content.split("\n").filter((l) => l.trim() !== "")
-
-                const table = parseMarkdownTable(lines)
-                if (table) {
-                    return (
-                        <div className="chat-table-wrap" key={bi}>
-                            <table className="chat-table">
-                                <thead>
-                                    <tr>
-                                        {table.headers.map((h, hi) => (
-                                            <th key={hi} className="chat-th">
-                                                <Inline text={h} onCitationClick={onCitationClick} />
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {table.rows.map((cells, ri) => (
-                                        <tr key={ri}>
-                                            {cells.map((cell, ci) => (
-                                                <td key={ci} className={ci === 0 ? "chat-td chat-td-key" : "chat-td"}>
-                                                    <Inline text={cell} onCitationClick={onCitationClick} />
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )
-                }
-
-                const isList = lines.length > 0 && lines.every(
-                    (l) => /^[-*•]\s/.test(l.trim()) || /^\d+\.\s/.test(l.trim())
-                )
-
-                if (isList) {
-                    return (
-                        <ul key={bi} style={{ paddingLeft: "14px", margin: "4px 0", listStyle: "none" }}>
-                            {lines.map((line, li) => (
-                                <li key={li} style={{ padding: "1px 0", display: "flex", gap: "5px", alignItems: "flex-start" }}>
-                                    <span style={{ color: "var(--color-ghost)", flexShrink: 0, fontSize: "7px", marginTop: "5px" }}>●</span>
-                                    <span><Inline text={line.replace(/^[-*•]\s*/, "").replace(/^\d+\.\s/, "")} onCitationClick={onCitationClick} /></span>
-                                </li>
-                            ))}
-                        </ul>
-                    )
-                }
+                const paragraphs = block.content
+                    .split(/\n\n+/)
+                    .map((p) => p.trim())
+                    .filter(Boolean)
 
                 return (
-                    <p key={bi} style={{ margin: bi > 0 ? "6px 0 0" : "0" }}>
-                        {lines.map((line, li) => (
-                            <span key={li}>
-                                <Inline text={line} onCitationClick={onCitationClick} />
-                                {li < lines.length - 1 && <br />}
-                            </span>
+                    <>
+                        {paragraphs.map((para, pi) => (
+                            <RenderParagraph
+                                key={`${bi}-${pi}`}
+                                text={para}
+                                onCitationClick={onCitationClick}
+                            />
                         ))}
-                    </p>
+                    </>
                 )
             })}
         </>
+    )
+}
+
+function RenderParagraph({ text, onCitationClick }) {
+    const lines = text.split("\n").filter((l) => l.trim() !== "")
+
+    const table = parseMarkdownTable(lines)
+    if (table) {
+        return (
+            <div className="chat-table-wrap">
+                <table className="chat-table">
+                    <thead>
+                        <tr>
+                            {table.headers.map((h, hi) => (
+                                <th key={hi} className="chat-th">
+                                    <Inline text={h} onCitationClick={onCitationClick} />
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {table.rows.map((cells, ri) => (
+                            <tr key={ri}>
+                                {cells.map((cell, ci) => (
+                                    <td key={ci} className={ci === 0 ? "chat-td chat-td-key" : "chat-td"}>
+                                        <Inline text={cell} onCitationClick={onCitationClick} />
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        )
+    }
+
+    const isList = lines.length > 0 && lines.every(
+        (l) => /^[-*•]\s/.test(l.trim()) || /^\d+\.\s/.test(l.trim())
+    )
+
+    if (isList) {
+        return (
+            <ul style={{ paddingLeft: "14px", margin: "4px 0", listStyle: "none" }}>
+                {lines.map((line, li) => (
+                    <li key={li} style={{ padding: "1px 0", display: "flex", gap: "5px", alignItems: "flex-start" }}>
+                        <span style={{ color: "var(--color-ghost)", flexShrink: 0, fontSize: "7px", marginTop: "5px" }}>●</span>
+                        <span><Inline text={line.replace(/^[-*•]\s*/, "").replace(/^\d+\.\s/, "")} onCitationClick={onCitationClick} /></span>
+                    </li>
+                ))}
+            </ul>
+        )
+    }
+
+    return (
+        <p style={{ margin: "4px 0" }}>
+            {lines.map((line, li) => (
+                <span key={li}>
+                    <Inline text={line} onCitationClick={onCitationClick} />
+                    {li < lines.length - 1 && <br />}
+                </span>
+            ))}
+        </p>
     )
 }
 
