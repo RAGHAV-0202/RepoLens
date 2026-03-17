@@ -18,6 +18,10 @@ Respond in this exact JSON format, nothing else:
 }
 
 Keep suggestions to 3-5 total. Be specific — reference actual file names.
+For architecture fields:
+- Never use vague values like "not clear", "N/A", "unknown" unless no evidence exists.
+- Prefer concrete paths from provided context (e.g. "src/main.ts", "package.json").
+- For pattern, include architecture style plus a short evidence hint from folders/files.
 `.trim()
 
 

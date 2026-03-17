@@ -42,6 +42,7 @@ export default function DetailPanel() {
     const mainFeatures = useMemo(() => inferMainFeatures(summary), [summary])
     const startHereFiles = useMemo(() => getStartHereFiles(tree), [tree])
     const inferredArchitecture = useMemo(() => inferStack(tree, stats), [tree, stats])
+    const inferredLanguages = useMemo(() => getLanguageBreakdown(stats, tree), [stats, tree])
 
     // reset tab when file changes
     const prevFile = useAppStore(s => s.previousSelectedFile)
@@ -84,6 +85,19 @@ export default function DetailPanel() {
                     </div>
 
                     <div className="section">
+                        <div className="section-label">Languages</div>
+                        <div className="ov-card" style={{ marginBottom: 0 }}>
+                            <div className="pills" style={{ marginTop: 0 }}>
+                                {inferredLanguages.map((lang) => (
+                                    <span key={lang.name} className="pill pill-b">
+                                        {lang.name} {lang.percent}%
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="section">
                         <div className="section-label">Main Features</div>
                         <div className="ov-card" style={{ marginBottom: 0 }}>
                             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -100,11 +114,12 @@ export default function DetailPanel() {
                     <div className="section">
                         <div className="section-label">Key Modules</div>
                         <div className="ov-card" style={{ marginBottom: 0 }}>
-                            <div className="pills">
-                                {keyModules.map((m) => (
-                                    <span key={m} className="pill pill-a">{m}</span>
-                                ))}
-                            </div>
+                            {keyModules.map((m) => (
+                                <div className="module-row" key={m.name + m.why}>
+                                    <div className="module-name">{m.name}</div>
+                                    <div className="module-why">{m.why}</div>
+                                </div>
+                            ))}
                         </div>
                     </div>
 
@@ -118,6 +133,17 @@ export default function DetailPanel() {
                             </div>
                         </div>
                     </div>
+
+                    {summary && (
+                        <div className="section" style={{ marginBottom: 0 }}>
+                            <div className="section-label">Repository Summary</div>
+                            <div className="ov-card" style={{ marginBottom: 0 }}>
+                                <div className="prose" style={{ fontSize: "13.5px", lineHeight: 1.9 }}>
+                                    <MarkdownBlock text={summary} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="section" style={{ marginBottom: 0 }}>
                         <div className="section-label">Start Here Guide</div>
@@ -146,15 +172,6 @@ export default function DetailPanel() {
                             </div>
                         </div>
                     </div>
-
-                    {summary && (
-                        <div className="section" style={{ marginTop: "18px", marginBottom: 0 }}>
-                            <div className="section-label">Repository Summary</div>
-                            <div className="prose">
-                                <MarkdownBlock text={summary} />
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
         )
@@ -428,6 +445,19 @@ function flattenFiles(node, acc = []) {
     return acc
 }
 
+function flattenDirs(node, acc = []) {
+    if (!node) return acc
+    if (node.type === "directory") {
+        acc.push(node)
+    }
+    if (node.children?.length) {
+        for (const child of node.children) {
+            flattenDirs(child, acc)
+        }
+    }
+    return acc
+}
+
 function getTopFolders(tree, limit = 6) {
     if (!tree?.children) return []
     return tree.children
@@ -437,20 +467,146 @@ function getTopFolders(tree, limit = 6) {
 }
 
 function getKeyModules(architecture, tree) {
-    const fromArchitecture = architecture && typeof architecture === "object"
-        ? Object.keys(architecture)
-            .filter((k) => !["pattern", "entryPoint", "configFile"].includes(k))
-            .slice(0, 8)
-        : []
+    const fromLlm = []
+    const moduleKeys = ["keyModules", "modules", "coreModules"]
+    for (const key of moduleKeys) {
+        const arr = architecture?.[key]
+        if (!Array.isArray(arr)) continue
+        for (const item of arr) {
+            if (typeof item === "string" && item.trim()) {
+                const value = item.trim()
+                fromLlm.push({
+                    key: value,
+                    name: humanModuleName(value),
+                    why: formatModuleWhy("Mentioned in architecture analysis", value),
+                })
+            } else if (item && typeof item === "object" && (item.path || item.name)) {
+                const value = item.path || item.name
+                fromLlm.push({
+                    key: value,
+                    name: humanModuleName(value),
+                    why: formatModuleWhy(item.role || item.reason || "Mentioned in architecture analysis", value),
+                })
+            }
+        }
+    }
 
-    if (fromArchitecture.length > 0) return fromArchitecture
+    if (fromLlm.length >= 3) return dedupeModules(fromLlm).slice(0, 8)
 
-    const preferred = ["auth", "controllers", "services", "routes", "models", "utils", "middlewares", "components"]
-    const folderSet = new Set(getTopFolders(tree, 20).map((f) => f.toLowerCase()))
-    const picked = preferred.filter((p) => folderSet.has(p)).map((p) => p)
-    if (picked.length > 0) return picked.slice(0, 8)
+    const files = flattenFiles(tree, [])
+    const dirs = flattenDirs(tree, []).filter((d) => d.path && d.path !== "/")
+    const candidates = []
 
-    return getTopFolders(tree, 8)
+    const dirSignals = [
+        { token: "routes", why: "Endpoint map and HTTP surface", score: 230 },
+        { token: "controllers", why: "Request handling and API orchestration", score: 220 },
+        { token: "services", why: "Business logic and integrations", score: 215 },
+        { token: "models", why: "Data schema and persistence layer", score: 205 },
+        { token: "components", why: "Reusable UI building blocks", score: 195 },
+        { token: "pages", why: "Screen-level user flows", score: 190 },
+        { token: "middleware", why: "Cross-cutting request behavior", score: 185 },
+        { token: "store", why: "State management hub", score: 180 },
+        { token: "api", why: "External/internal API boundary", score: 175 },
+        { token: "prisma", why: "ORM schema and data access", score: 180 },
+        { token: "db", why: "Database-facing logic", score: 170 },
+        { token: "hooks", why: "App-specific behavior composition", score: 165 },
+    ]
+
+    for (const dir of dirs) {
+        const pathLower = (dir.path || "").toLowerCase()
+        const depth = (dir.path.match(/\//g) || []).length
+        for (const signal of dirSignals) {
+            if (!pathLower.includes(signal.token)) continue
+            const score = signal.score + Math.max(0, 24 - depth * 3)
+            candidates.push({
+                key: dir.path,
+                name: humanModuleName(dir.path),
+                why: formatModuleWhy(signal.why, dir.path),
+                score,
+                kind: "core",
+            })
+            break
+        }
+    }
+
+    const fileSignals = [
+        { test: (f) => /(router|routes|controller|service|model|schema|store|provider)/i.test(f.path), why: "Core domain module", score: 180, kind: "core" },
+        { test: (f) => /(^|\/)(app|server|main|index)\.(js|ts|py|go|java|rs)$/i.test(f.path), why: "Core startup flow", score: 160, kind: "core" },
+        { test: (f) => f.badge === "entry", why: "Likely execution entry point", score: 145, kind: "core" },
+        { test: (f) => f.badge === "config", why: "Project configuration anchor", score: 70, kind: "meta" },
+        { test: (f) => /^readme\.md$/i.test(f.name), why: "Project intent and setup guide", score: 45, kind: "meta" },
+    ]
+
+    for (const f of files) {
+        const depth = (f.path.match(/\//g) || []).length
+        for (const signal of fileSignals) {
+            if (!signal.test(f)) continue
+            const score = signal.score + Math.max(0, 20 - depth * 2)
+            candidates.push({
+                key: f.path,
+                name: humanModuleName(f.path),
+                why: formatModuleWhy(signal.why, f.path),
+                score,
+                kind: signal.kind,
+            })
+            break
+        }
+    }
+
+    if (candidates.length === 0) {
+        return getTopFolders(tree, 8).map((folder) => ({
+            key: folder,
+            name: humanModuleName(folder),
+            why: formatModuleWhy("Top-level module folder", folder),
+        }))
+    }
+
+    const sorted = candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    const core = dedupeModules(sorted.filter((m) => m.kind !== "meta"))
+    const meta = dedupeModules(sorted.filter((m) => m.kind === "meta"))
+
+    const result = core.slice(0, 8)
+    if (result.length < 5) {
+        result.push(...meta.slice(0, 8 - result.length))
+    }
+
+    return result.slice(0, 8).map(({ name, why }) => ({ name, why }))
+}
+
+function dedupeModules(items) {
+    const out = []
+    const seen = new Set()
+    for (const item of items) {
+        const key = (item.key || item.name || "").toLowerCase()
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        out.push(item)
+    }
+    return out
+}
+
+function humanModuleName(value) {
+    const text = String(value || "").replace(/^\/+|\/+$/g, "")
+    if (!text) return "module"
+
+    const parts = text.split("/")
+    if (parts.length === 1) return text
+
+    const tail = parts[parts.length - 1]
+    const prev = parts[parts.length - 2]
+    const lowTail = tail.toLowerCase()
+
+    if (["index.js", "index.ts", "app.js", "server.js", "main.py", "main.ts"].includes(lowTail)) {
+        return `${prev}/${tail}`
+    }
+
+    return tail
+}
+
+function formatModuleWhy(reason, location) {
+    const loc = String(location || "")
+    if (!loc) return reason
+    return `${reason} (${loc})`
 }
 
 function getStartHereFiles(tree) {
@@ -546,24 +702,24 @@ function inferStack(tree, stats) {
     const isJavaRuntime = hasExt([".java"]) || hasName("pom.xml") || hasName("build.gradle")
     const isGoRuntime = hasExt([".go"]) || hasName("go.mod")
 
-    let runtime = "Not clearly detected"
+    let runtime = "No strong runtime signal found"
     if (isNodeRuntime) runtime = "Node.js"
     else if (isPythonRuntime) runtime = "Python"
     else if (isJavaRuntime) runtime = "Java/JVM"
     else if (isGoRuntime) runtime = "Go"
 
-    let uiLayer = "Not obvious"
+    let uiLayer = "No strong frontend signal"
     if (hasNext) uiLayer = "Next.js"
     else if (hasReactLike) uiLayer = hasName("vite.config.js") || hasName("vite.config.ts") ? "React + Vite" : "React-style UI"
     else if (hasFrontendSignals >= 2) uiLayer = "Web UI present"
 
-    let apiLayer = "Not obvious"
+    let apiLayer = "No strong backend signal"
     if (hasPathToken(["/routes/", "/controllers/"]) && isNodeRuntime) apiLayer = "Node.js API (Express-style structure)"
     else if (isPythonRuntime && hasName("manage.py")) apiLayer = "Django-style backend"
     else if (isPythonRuntime && hasName("app.py")) apiLayer = "Python app backend"
     else if (hasBackendSignals >= 2) apiLayer = "Backend service present"
 
-    let dataLayer = "Not clearly detected"
+    let dataLayer = "No strong database signal"
     if (hasName("schema.prisma")) dataLayer = "Prisma ORM"
     else if (hasPathToken(["mongo", "mongoose"]) || hasFolderToken(["mongo", "mongodb"])) dataLayer = "MongoDB-style data layer"
     else if (hasExt([".sql"]) || hasPathToken(["/migrations/", "schema.sql"])) dataLayer = "SQL database layer"
@@ -574,6 +730,17 @@ function inferStack(tree, stats) {
     else if (hasBackendSignals >= 2) shape = "Backend/API service"
     else if (hasFrontendSignals >= 2) shape = "Frontend application"
 
+    const entryPoints = files
+        .filter((f) => f.badge === "entry")
+        .map((f) => f.path)
+    const configFiles = files
+        .filter((f) => f.badge === "config")
+        .map((f) => f.path)
+    const languageLabel = getLanguageBreakdown(stats, tree)
+        .slice(0, 3)
+        .map((l) => `${l.name} ${l.percent}%`)
+        .join(" · ") || dominantCodeLanguage
+
     return {
         rows: [
             { label: "shape", value: shape },
@@ -581,9 +748,59 @@ function inferStack(tree, stats) {
             { label: "ui layer", value: uiLayer },
             { label: "api layer", value: apiLayer },
             { label: "data layer", value: dataLayer },
-            { label: "language", value: dominantCodeLanguage },
+            { label: "languages", value: languageLabel },
+            { label: "entry points", value: summarizePathList(entryPoints, 3, "No explicit entry file tagged") },
+            { label: "key configs", value: summarizePathList(configFiles, 3, "No primary config detected") },
         ]
     }
+}
+
+function summarizePathList(list, limit = 3, fallback = "None") {
+    if (!Array.isArray(list) || list.length === 0) return fallback
+    const head = list.slice(0, limit)
+    const remaining = list.length - head.length
+    return remaining > 0 ? `${head.join(", ")} +${remaining} more` : head.join(", ")
+}
+
+function getLanguageBreakdown(stats, tree) {
+    const fromStats = stats?.languages && typeof stats.languages === "object"
+        ? Object.entries(stats.languages)
+            .filter(([, pct]) => Number.isFinite(Number(pct)) && Number(pct) > 0)
+            .map(([name, percent]) => ({ name, percent: Number(percent) }))
+            .sort((a, b) => b.percent - a.percent)
+        : []
+
+    if (fromStats.length > 0) return fromStats.slice(0, 6)
+
+    const files = flattenFiles(tree, [])
+    const extToLang = {
+        ".js": "JavaScript",
+        ".jsx": "JavaScript",
+        ".ts": "TypeScript",
+        ".tsx": "TypeScript",
+        ".py": "Python",
+        ".java": "Java",
+        ".go": "Go",
+        ".rs": "Rust",
+        ".cpp": "C++",
+        ".c": "C",
+        ".cs": "C#",
+        ".rb": "Ruby",
+        ".php": "PHP",
+    }
+    const counts = new Map()
+    for (const f of files) {
+        const lang = extToLang[(f.ext || "").toLowerCase()]
+        if (!lang) continue
+        counts.set(lang, (counts.get(lang) || 0) + 1)
+    }
+    const total = [...counts.values()].reduce((a, b) => a + b, 0)
+    if (!total) return [{ name: "Unknown", percent: 100 }]
+
+    return [...counts.entries()]
+        .map(([name, count]) => ({ name, percent: Math.round((count / total) * 100) }))
+        .sort((a, b) => b.percent - a.percent)
+        .slice(0, 6)
 }
 
 function inferDominantCodeLanguage(files, stats) {

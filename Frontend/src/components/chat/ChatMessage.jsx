@@ -21,13 +21,23 @@ function ChatMarkdown({ text }) {
     const trimmed = text.trim()
     if (!trimmed) return null
 
-    // split on double newlines for paragraphs
-    const blocks = trimmed.split(/\n\n+/)
+    const blocks = splitBlocks(trimmed)
 
     return (
         <>
             {blocks.map((block, bi) => {
-                const lines = block.split("\n").filter((l) => l.trim() !== "")
+                if (block.type === "code") {
+                    return (
+                        <div className="chat-code-wrap" key={bi}>
+                            {block.lang && <div className="chat-code-lang">{block.lang}</div>}
+                            <pre className="chat-code-block">
+                                <code>{block.content}</code>
+                            </pre>
+                        </div>
+                    )
+                }
+
+                const lines = block.content.split("\n").filter((l) => l.trim() !== "")
 
                 // detect markdown table
                 const isTable = lines.length >= 2 &&
@@ -105,6 +115,51 @@ function ChatMarkdown({ text }) {
             })}
         </>
     )
+}
+
+function splitBlocks(text) {
+    const lines = text.split("\n")
+    const blocks = []
+    let textBuffer = []
+    let codeBuffer = []
+    let inCode = false
+    let codeLang = ""
+
+    const flushText = () => {
+        const content = textBuffer.join("\n").trim()
+        if (content) blocks.push({ type: "text", content })
+        textBuffer = []
+    }
+
+    const flushCode = () => {
+        const content = codeBuffer.join("\n")
+        blocks.push({ type: "code", lang: codeLang, content })
+        codeBuffer = []
+        codeLang = ""
+    }
+
+    for (const line of lines) {
+        const fence = line.match(/^```\s*([a-zA-Z0-9_+-]+)?\s*$/)
+        if (fence) {
+            if (inCode) {
+                flushCode()
+                inCode = false
+            } else {
+                flushText()
+                inCode = true
+                codeLang = fence[1] || ""
+            }
+            continue
+        }
+
+        if (inCode) codeBuffer.push(line)
+        else textBuffer.push(line)
+    }
+
+    if (inCode) flushCode()
+    flushText()
+
+    return blocks
 }
 
 /** Render **bold** and `code` inline */

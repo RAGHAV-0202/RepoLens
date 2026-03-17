@@ -15,6 +15,7 @@ const MAX_SIDEBAR = 400
 
 export default function AppPage() {
     const user = useAppStore((s) => s.user)
+    const authChecked = useAppStore((s) => s.authChecked)
     const sessionId = useAppStore((s) => s.sessionId)
     const sidebarView = useAppStore((s) => s.sidebarView)
     const isAnalyzing = useAppStore((s) => s.isAnalyzing)
@@ -164,7 +165,7 @@ export default function AppPage() {
             )}
 
             {/* ── unauthenticated guest overlay ── */}
-            {!user && (
+            {!user && authChecked && (
                 <div className="overlay-backdrop" style={{
                     position: "fixed",
                     inset: 0,
