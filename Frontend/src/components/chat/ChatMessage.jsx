@@ -105,15 +105,22 @@ function RenderParagraph({ text, onCitationClick }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {table.rows.map((cells, ri) => (
-                            <tr key={ri}>
-                                {cells.map((cell, ci) => (
-                                    <td key={ci} className={ci === 0 ? "chat-td chat-td-key" : "chat-td"}>
-                                        <Inline text={cell} onCitationClick={onCitationClick} />
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
+                        {table.rows.map((cells, ri) => {
+                            const rowFilePath = extractFilePathFromText(cells[0] || "")
+                            return (
+                                <tr key={ri}>
+                                    {cells.map((cell, ci) => (
+                                        <td key={ci} className={ci === 0 ? "chat-td chat-td-key" : "chat-td"}>
+                                            <Inline
+                                                text={cell}
+                                                onCitationClick={onCitationClick}
+                                                defaultFilePath={ci > 0 ? rowFilePath : null}
+                                            />
+                                        </td>
+                                    ))}
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -171,7 +178,7 @@ function splitBlocks(text) {
     }
 
     for (const line of lines) {
-        const fence = line.match(/^```\s*([a-zA-Z0-9_+-]+)?\s*$/)
+        const fence = line.match(/^\s*```+\s*([a-zA-Z0-9_+-]+)?\s*$/)
         if (fence) {
             if (inCode) {
                 flushCode()
@@ -226,7 +233,7 @@ function splitTableCells(line) {
 }
 
 /** Render **bold**, `code`, and [links](target) inline */
-function Inline({ text, onCitationClick }) {
+function Inline({ text, onCitationClick, defaultFilePath = null }) {
     const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g)
 
     return (
@@ -268,7 +275,7 @@ function Inline({ text, onCitationClick }) {
 
                 return (
                     <span key={i}>
-                        {renderTextWithAutoCitations(part, onCitationClick, `plain-${i}`)}
+                        {renderTextWithAutoCitations(part, onCitationClick, `plain-${i}`, defaultFilePath)}
                     </span>
                 )
             })}
@@ -276,13 +283,13 @@ function Inline({ text, onCitationClick }) {
     )
 }
 
-function renderTextWithAutoCitations(text, onCitationClick, keyPrefix = "c") {
+function renderTextWithAutoCitations(text, onCitationClick, keyPrefix = "c", defaultFilePath = null) {
     if (!text) return null
 
     const nodes = []
     let lastIndex = 0
 
-    const re = /`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s*\((?:line|lines)\s*(\d+)(?:\s*[-–]\s*(\d+))?\)|`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)#L(\d+)(?:-L?(\d+))?`?/g
+    const re = /`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s*\((?:line|lines)\s*(\d+)(?:\s*[-–]\s*(\d+))?\)|`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)#L(\d+)(?:-L?(\d+))?`?|\bL(\d+)(?:\s*[-–]\s*L?(\d+))?\b/g
     let m
 
     while ((m = re.exec(text)) !== null) {
@@ -297,9 +304,12 @@ function renderTextWithAutoCitations(text, onCitationClick, keyPrefix = "c") {
         const startB = m[5]
         const endB = m[6]
 
-        const path = pathA || pathB
-        const start = Number(startA || startB)
-        const end = Number(endA || endB || start)
+        const startC = m[7]
+        const endC = m[8]
+
+        const path = pathA || pathB || defaultFilePath
+        const start = Number(startA || startB || startC)
+        const end = Number(endA || endB || endC || start)
 
         if (path && Number.isFinite(start) && start > 0) {
             const target = `${normalizeRepoPath(path)}#L${start}${end > start ? `-L${end}` : ""}`
@@ -326,6 +336,13 @@ function renderTextWithAutoCitations(text, onCitationClick, keyPrefix = "c") {
     }
 
     return nodes.length > 0 ? nodes : text
+}
+
+function extractFilePathFromText(text) {
+    if (!text) return null
+    const clean = String(text).replace(/`/g, "").trim()
+    const m = clean.match(/([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/)
+    return m ? normalizeRepoPath(m[1]) : null
 }
 
 function isCitationTarget(target) {
