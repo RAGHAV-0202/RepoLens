@@ -11,6 +11,8 @@ export default function Topbar() {
     const analyzeTime = useAppStore((s) => s.analyzeTime)
     const user = useAppStore((s) => s.user)
     const isAnalyzing = useAppStore((s) => s.isAnalyzing)
+    const analyzeProgress = useAppStore((s) => s.analyzeProgress)
+    const analyzeStage = useAppStore((s) => s.analyzeStage)
     const darkMode = useAppStore((s) => s.darkMode)
     const toggleDarkMode = useAppStore((s) => s.toggleDarkMode)
     const navigate = useNavigate()
@@ -45,6 +47,7 @@ export default function Topbar() {
     const statusText = statusParts.join(" · ")
 
     return (
+        <>
         <div className="topbar">
             <div className="logo" style={{ cursor: "pointer" }} onClick={() => navigate("/dashboard")}>
                 repo<em>lens</em>
@@ -74,7 +77,24 @@ export default function Topbar() {
                 {isAnalyzing ? "Analyzing…" : "Analyze"}
             </button>
 
-            {(sizeMB || analyzeTime) && (
+            {isAnalyzing && (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flex: "0 1 220px" }}>
+                    <div style={{ flex: 1, height: "5px", borderRadius: "999px", background: "var(--color-muted)", overflow: "hidden" }}>
+                        <div style={{
+                            height: "100%",
+                            width: `${Math.max(0, Math.min(100, Math.round(analyzeProgress || 0)))}%`,
+                            background: "linear-gradient(90deg, var(--color-core-text, #7c6af7), var(--color-ink))",
+                            transition: "width 0.45s ease",
+                            borderRadius: "999px"
+                        }} />
+                    </div>
+                    <span style={{ fontSize: "10px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
+                        {Math.max(0, Math.min(100, Math.round(analyzeProgress || 0)))}%
+                    </span>
+                </div>
+            )}
+
+            {!isAnalyzing && (sizeMB || analyzeTime) && (
                 <div className="meta">{statusText}</div>
             )}
 
@@ -126,5 +146,22 @@ export default function Topbar() {
                 )}
             </div>
         </div>
+
+        {isAnalyzing && analyzeStage && (
+            <div style={{
+                height: "22px",
+                background: "var(--color-surface)",
+                borderBottom: "1px solid var(--color-border)",
+                display: "flex",
+                alignItems: "center",
+                paddingLeft: "14px",
+                flexShrink: 0
+            }}>
+                <span style={{ fontSize: "10px", color: "var(--color-ghost)", fontFamily: "var(--font-mono)" }}>
+                    {analyzeStage}
+                </span>
+            </div>
+        )}
+        </>
     )
 }

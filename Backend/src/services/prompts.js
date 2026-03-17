@@ -8,7 +8,9 @@ Respond in this exact JSON format, nothing else:
   "architecture": {
     "pattern": "e.g. MVC, microservices, encoder-decoder, CLI tool",
     "entryPoint": "main file or command to run the project",
-    "configFile": "primary config file"
+    "configFile": "primary config file",
+    "description": "1-2 sentences describing how the codebase is organized and how data flows through it",
+    "keyModules": ["folder/module: one-line purpose", "folder/module: one-line purpose"]
   },
   "suggestions": [
     { "type": "error",   "text": "specific issue found" },
@@ -17,7 +19,7 @@ Respond in this exact JSON format, nothing else:
   ]
 }
 
-Keep suggestions to 3-5 total. Be specific — reference actual file names.
+Keep suggestions to 3-5 total. Keep keyModules to 3-6 entries covering the most important parts of the repo. Be specific — reference actual file names and folder names.
 `.trim()
 
 

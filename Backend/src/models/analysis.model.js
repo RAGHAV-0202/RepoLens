@@ -67,6 +67,8 @@ const AnalysisSchema = new mongoose.Schema({
     pattern: { type: String, default: "" },
     entryPoint: { type: String, default: "" },
     configFile: { type: String, default: "" },
+    description: { type: String, default: "" },
+    keyModules: { type: [String], default: [] },
   },
 
   // cache file-level explanations so same file isn't re-analyzed

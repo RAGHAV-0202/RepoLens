@@ -169,7 +169,7 @@ function RepoTab({ stats, summary, architecture, tree }) {
             )}
 
             {/* architecture */}
-            {architecture && (architecture.pattern || architecture.entryPoint || architecture.configFile) && (
+            {architecture && (architecture.pattern || architecture.entryPoint || architecture.configFile || architecture.description || (architecture.keyModules && architecture.keyModules.length > 0)) && (
                 <div className="ov-card">
                     <div className="ov-card-title">Architecture</div>
                     {architecture.pattern && (
@@ -188,6 +188,38 @@ function RepoTab({ stats, summary, architecture, tree }) {
                         <div className="kv">
                             <div className="kv-k">config</div>
                             <div className="kv-v">{architecture.configFile}</div>
+                        </div>
+                    )}
+                    {architecture.description && (
+                        <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--color-prose)", lineHeight: 1.5 }}>
+                            {architecture.description}
+                        </div>
+                    )}
+                    {architecture.keyModules && architecture.keyModules.length > 0 && (
+                        <div style={{ marginTop: "8px" }}>
+                            <div style={{ fontSize: "10px", fontWeight: 600, color: "var(--color-ghost)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "5px" }}>
+                                Key modules
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                {architecture.keyModules.map((mod, i) => {
+                                    const colonIdx = mod.indexOf(":")
+                                    const hasDescription = colonIdx > -1
+                                    const modName = hasDescription ? mod.slice(0, colonIdx).trim() : mod
+                                    const modDesc = hasDescription ? mod.slice(colonIdx + 1).trim() : null
+                                    return (
+                                        <div key={i} style={{ display: "flex", gap: "6px", alignItems: "flex-start" }}>
+                                            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--color-ink)", fontWeight: 500, flexShrink: 0, paddingTop: "1px" }}>
+                                                {modName}
+                                            </span>
+                                            {modDesc && (
+                                                <span style={{ fontSize: "10px", color: "var(--color-ghost)", lineHeight: 1.4 }}>
+                                                    {modDesc}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
                         </div>
                     )}
                 </div>

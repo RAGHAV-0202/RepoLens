@@ -39,9 +39,9 @@ export default function AppPage() {
         const store = useAppStore.getState()
         const needsResume = Boolean(urlSessionId) && sessionId !== urlSessionId
 
-        if (needsResume && !store.isAnalyzing) {
-            // URL session differs from store session (or page was refreshed): resume target session.
-            store.setIsAnalyzing(true)
+        if (needsResume && !store.isAnalyzing && !store.isRestoring) {
+            // URL session differs from store session (or page was refreshed): restore target session.
+            store.setIsRestoring(true)
             api.get(`/analyze/resume?sessionId=${urlSessionId}`)
                 .then(res => {
                     if (res.data?.success) {
@@ -54,7 +54,7 @@ export default function AppPage() {
                     navigate("/dashboard", { replace: true })
                 })
                 .finally(() => {
-                    useAppStore.getState().setIsAnalyzing(false)
+                    useAppStore.getState().setIsRestoring(false)
                 })
             return
         }
@@ -91,7 +91,7 @@ export default function AppPage() {
         document.addEventListener("mouseup", onMouseUp)
     }, [sidebarWidth])
 
-    if (!sessionId && !isAnalyzing) return null
+    if (!sessionId && !isAnalyzing && !isRestoring) return null
 
     return (
         <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
