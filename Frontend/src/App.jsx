@@ -5,6 +5,7 @@ import LandingPage from "./pages/LandingPage"
 import AppPage from "./pages/AppPage"
 import HistoryPage from "./pages/HistoryPage"
 import DashboardPage from "./pages/DashboardPage"
+import SharePage from "./pages/SharePage"
 import LoginForm from "./components/auth/LoginForm"
 import RegisterForm from "./components/auth/RegisterForm"
 
@@ -55,6 +56,7 @@ export default function App() {
                     </ProtectedRoute>
                 }
             />
+            <Route path="/share/:sessionId" element={<SharePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     )

@@ -1,8 +1,10 @@
 import { Router } from "express"
-import { analyzeRepo, explainFileRoute, getFileRawRoute, getUserHistory, resumeSession, restoreSession } from "../controllers/analyze.controllers.js"
+import { analyzeRepo, explainFileRoute, getFileRawRoute, getUserHistory, resumeSession, restoreSession, getPublicAnalysis } from "../controllers/analyze.controllers.js"
 import { verifyJWT } from "../middlewares/auth.middleware.js"
 
 const router = Router()
+
+router.get("/share/:sessionId", getPublicAnalysis)
 
 router.use(verifyJWT)
 

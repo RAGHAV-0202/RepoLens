@@ -1,10 +1,65 @@
 import useAppStore from "../../store/useAppStore"
 
+// ── tech-stack inference ──────────────────────────────────────────────────────
+const STACK_SIGNALS = [
+    { label: "Next.js",         pattern: /^next\.config\.[cm]?[jt]s$/ },
+    { label: "Vite",            pattern: /^vite\.config\.[cm]?[jt]s$/ },
+    { label: "TypeScript",      pattern: /^tsconfig\.json$/ },
+    { label: "Tailwind",        pattern: /^tailwind\.config\.[cm]?[jt]s$/ },
+    { label: "Prisma",          pattern: /^schema\.prisma$/ },
+    { label: "Docker",          pattern: /^(Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/ },
+    { label: "GitHub Actions",  pattern: /^\.github$/ },
+    { label: "Jest",            pattern: /^jest\.config\.[cm]?[jt]s$/ },
+    { label: "Vitest",          pattern: /^vitest\.config\.[cm]?[jt]s$/ },
+    { label: "ESLint",          pattern: /^\.eslintrc(\.(json|yaml|yml|js|cjs))?$|^eslint\.config\.[cm]?[jt]s$/ },
+    { label: "Go",              pattern: /^go\.mod$/ },
+    { label: "Rust",            pattern: /^Cargo\.toml$/ },
+    { label: "Python",          pattern: /^(requirements\.txt|pyproject\.toml|setup\.py)$/ },
+    { label: "Java/Maven",      pattern: /^pom\.xml$/ },
+    { label: "Gradle",          pattern: /^(build\.gradle|settings\.gradle)(\.kts)?$/ },
+]
+
+const BADGE_COLORS = {
+    "Next.js":        { bg: "#000", color: "#fff" },
+    "Vite":           { bg: "#9361ff22", color: "#9361ff" },
+    "TypeScript":     { bg: "#3178c622", color: "#3178c6" },
+    "Tailwind":       { bg: "#06b6d422", color: "#06b6d4" },
+    "Prisma":         { bg: "#38bdf822", color: "#0ea5e9" },
+    "Docker":         { bg: "#2496ed22", color: "#2496ed" },
+    "GitHub Actions": { bg: "#2dba4e22", color: "#2dba4e" },
+    "Jest":           { bg: "#c21e5622", color: "#c21e56" },
+    "Vitest":         { bg: "#f59e0b22", color: "#b45309" },
+    "ESLint":         { bg: "#4b32c322", color: "#4b32c3" },
+    "Go":             { bg: "#00add822", color: "#00add8" },
+    "Rust":           { bg: "#ce412b22", color: "#ce412b" },
+    "Python":         { bg: "#3572a522", color: "#3572a5" },
+    "Java/Maven":     { bg: "#b0752122", color: "#b07521" },
+    "Gradle":         { bg: "#02303a22", color: "#02303a" },
+}
+
+function collectNames(node, names = new Set()) {
+    if (!node) return names
+    names.add(node.name)
+    if (Array.isArray(node.children)) {
+        node.children.forEach((c) => collectNames(c, names))
+    }
+    return names
+}
+
+function inferTechStack(tree) {
+    const names = collectNames(tree)
+    return STACK_SIGNALS
+        .filter(({ pattern }) => [...names].some((n) => pattern.test(n)))
+        .map(({ label }) => label)
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function OverviewPanel() {
     const summary = useAppStore((s) => s.summary)
     const stats = useAppStore((s) => s.stats)
     const architecture = useAppStore((s) => s.architecture)
     const suggestions = useAppStore((s) => s.suggestions)
+    const tree = useAppStore((s) => s.tree)
     const activeTab = useAppStore((s) => s.activeOverviewTab)
     const setTab = useAppStore((s) => s.setActiveOverviewTab)
 
@@ -30,7 +85,7 @@ export default function OverviewPanel() {
 
             <div className="ov-body">
                 {activeTab === "repo" && (
-                    <RepoTab stats={stats} summary={summary} architecture={architecture} />
+                    <RepoTab stats={stats} summary={summary} architecture={architecture} tree={tree} />
                 )}
                 {activeTab === "issues" && (
                     <IssuesTab suggestions={suggestions} />
@@ -40,7 +95,7 @@ export default function OverviewPanel() {
     )
 }
 
-function RepoTab({ stats, summary, architecture }) {
+function RepoTab({ stats, summary, architecture, tree }) {
     const primaryLang = stats?.primaryLanguage || ""
     const langPercent = stats?.languages
         ? (primaryLang && stats.languages instanceof Map
@@ -49,6 +104,8 @@ function RepoTab({ stats, summary, architecture }) {
                 ? Object.values(stats.languages)[0]
                 : null))
         : null
+
+    const techStack = tree ? inferTechStack(tree) : []
 
     return (
         <>
@@ -72,6 +129,34 @@ function RepoTab({ stats, summary, architecture }) {
                     <div className="stat-v">—</div>
                 </div>
             </div>
+
+            {/* tech stack badges */}
+            {techStack.length > 0 && (
+                <div style={{ margin: "10px 0 2px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                    {techStack.map((label) => {
+                        const c = BADGE_COLORS[label] || { bg: "var(--color-surface)", color: "var(--color-secondary)" }
+                        return (
+                            <span
+                                key={label}
+                                style={{
+                                    background: c.bg,
+                                    color: c.color,
+                                    border: `1px solid ${c.color}44`,
+                                    borderRadius: "4px",
+                                    padding: "1px 7px",
+                                    fontSize: "10px",
+                                    fontFamily: "var(--font-mono)",
+                                    fontWeight: 500,
+                                    letterSpacing: "0.02em",
+                                    whiteSpace: "nowrap",
+                                }}
+                            >
+                                {label}
+                            </span>
+                        )
+                    })}
+                </div>
+            )}
 
             {/* what this repo does */}
             {summary && (

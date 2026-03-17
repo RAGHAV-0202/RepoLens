@@ -377,3 +377,26 @@ export const getUserHistory = asyncHandler(async (req, res, next) => {
 
     return res.status(200).json(new ApiResponse(200, analyses, "OK"))
 })
+
+export const getPublicAnalysis = asyncHandler(async (req, res, next) => {
+    const { sessionId } = req.params
+    if (!sessionId) throw new apiError(400, "sessionId is required")
+
+    const analysis = await Analysis.findOne({ sessionId })
+        .select("repoName repoUrl summary stats architecture suggestions dependencyGraph treeJSON createdAt sessionId")
+
+    if (!analysis) throw new apiError(404, "Analysis not found or has expired")
+
+    return res.status(200).json(new ApiResponse(200, {
+        sessionId: analysis.sessionId,
+        repoName: analysis.repoName,
+        repoUrl: analysis.repoUrl,
+        summary: analysis.summary,
+        stats: analysis.stats,
+        architecture: analysis.architecture,
+        suggestions: analysis.suggestions,
+        dependencyGraph: analysis.dependencyGraph || { nodes: [], edges: [] },
+        tree: analysis.treeJSON,
+        createdAt: analysis.createdAt,
+    }, "OK"))
+})

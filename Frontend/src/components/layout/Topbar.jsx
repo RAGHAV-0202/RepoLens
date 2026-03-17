@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom"
 
 export default function Topbar() {
     const repoUrl = useAppStore((s) => s.repoUrl)
+    const sessionId = useAppStore((s) => s.sessionId)
     const cached = useAppStore((s) => s.cached)
     const sizeMB = useAppStore((s) => s.sizeMB)
     const analyzeTime = useAppStore((s) => s.analyzeTime)
@@ -15,7 +16,17 @@ export default function Topbar() {
     const navigate = useNavigate()
 
     const [inputUrl, setInputUrl] = useState(repoUrl || "")
+    const [shareCopied, setShareCopied] = useState(false)
     const { analyze } = useAnalyze()
+
+    const handleShare = () => {
+        if (!sessionId) return
+        const shareUrl = `${window.location.origin}/share/${sessionId}`
+        navigator.clipboard.writeText(shareUrl).then(() => {
+            setShareCopied(true)
+            setTimeout(() => setShareCopied(false), 2000)
+        })
+    }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -68,6 +79,27 @@ export default function Topbar() {
             )}
 
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
+                {sessionId && (
+                    <button
+                        onClick={handleShare}
+                        title="Copy shareable link"
+                        style={{
+                            border: "1px solid var(--color-border)",
+                            background: shareCopied ? "var(--color-ink)" : "var(--color-surface)",
+                            color: shareCopied ? "var(--color-base)" : "var(--color-secondary)",
+                            borderRadius: "5px",
+                            padding: "3px 9px",
+                            fontSize: "11px",
+                            cursor: "pointer",
+                            fontFamily: "var(--font-mono)",
+                            transition: "background 0.15s, color 0.15s",
+                            flexShrink: 0
+                        }}
+                    >
+                        {shareCopied ? "✓ Copied!" : "Share"}
+                    </button>
+                )}
+
                 {/* dark mode toggle */}
                 <button
                     onClick={toggleDarkMode}
