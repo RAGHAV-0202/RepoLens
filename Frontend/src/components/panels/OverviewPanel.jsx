@@ -101,7 +101,7 @@ function RepoTab({ stats, summary, architecture, tree }) {
         ? (primaryLang && stats.languages instanceof Map
             ? stats.languages.get(primaryLang)
             : (stats.languages && typeof stats.languages === "object"
-                ? Object.values(stats.languages)[0]
+                ? stats.languages[primaryLang]
                 : null))
         : null
 
