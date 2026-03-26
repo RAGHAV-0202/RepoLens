@@ -86,7 +86,7 @@ export async function chatWithRepo({ message, history, contextFiles, repoName },
     await pipeStreamWithFallback({
         models: FAST_MODELS,
         temperature: 0.4,
-        max_tokens: 1024,
+        max_tokens: 768,
         messages,
         res
     })
@@ -116,8 +116,8 @@ async function callWithFallback({ models, ...params }) {
             return result
 
         } catch (err) {
-            const isRateLimit = err?.status === 429 || err?.message?.includes("rate limit")
-            const isModelUnavailable = err?.status === 503 || err?.message?.includes("unavailable")
+            const isRateLimit = isRetriableLLMError(err)
+            const isModelUnavailable = err?.status === 503 || err?.message?.toLowerCase?.().includes("unavailable")
 
             if (isRateLimit || isModelUnavailable) {
                 lastError = err
@@ -151,18 +151,11 @@ function setSSEHeaders(res) {
 }
 
 async function pipeStream(stream, res) {
-    try {
-        for await (const chunk of stream) {
-            const text = chunk.choices[0]?.delta?.content || ""
-            if (text) {
-                res.write(`data: ${JSON.stringify({ text })}\n\n`)
-            }
+    for await (const chunk of stream) {
+        const text = chunk.choices[0]?.delta?.content || ""
+        if (text) {
+            res.write(`data: ${JSON.stringify({ text })}\n\n`)
         }
-        res.write(`data: [DONE]\n\n`)
-    } catch (err) {
-        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`)
-    } finally {
-        res.end()
     }
 }
 
@@ -188,13 +181,15 @@ async function pipeStreamWithFallback({ models, temperature, max_tokens, message
 
             // attempt to stream and detect errors
             await pipeStream(stream, res)
+            res.write(`data: [DONE]\n\n`)
+            res.end()
             console.log(`[llm] streaming completed successfully with model: ${model}`)
             return
 
         } catch (err) {
             lastError = err
-            const isRateLimit = err?.status === 429 || err?.message?.includes("rate limit")
-            const isModelUnavailable = err?.status === 503 || err?.message?.includes("unavailable")
+            const isRateLimit = isRetriableLLMError(err)
+            const isModelUnavailable = err?.status === 503 || err?.message?.toLowerCase?.().includes("unavailable")
 
             if ((isRateLimit || isModelUnavailable) && i + 1 < models.length) {
                 console.warn(`[llm] model ${model} rate limited/unavailable during stream. trying next model...`)
@@ -248,13 +243,14 @@ function buildChatContext(contextFiles, repoName) {
     }
 
     let ctx = `Repository: ${repoName}\n\nRelevant files:\n`
-    for (const [filePath, { content }] of Object.entries(contextFiles)) {
+    const entries = Object.entries(contextFiles).slice(0, 6)
+    for (const [filePath, { content }] of entries) {
         ctx += `\n--- ${filePath} ---\n${numberedSnippet(content)}\n`
     }
     return ctx
 }
 
-function numberedSnippet(content, maxChars = 3500, maxLines = 220) {
+function numberedSnippet(content, maxChars = 1500, maxLines = 120) {
     const safe = typeof content === "string" ? content : ""
     const clipped = safe.slice(0, maxChars)
     const lines = clipped.split("\n").slice(0, maxLines)
@@ -271,6 +267,22 @@ function numberedSnippet(content, maxChars = 3500, maxLines = 220) {
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isRetriableLLMError(err) {
+    const message = String(err?.message || "").toLowerCase()
+    const code = String(err?.code || "").toLowerCase()
+
+    if (err?.status === 429 || err?.status === 503 || err?.status === 413) return true
+    if (code.includes("rate_limit") || code.includes("rate_limit_exceeded")) return true
+    if (message.includes("rate limit")) return true
+    if (message.includes("rate_limit_exceeded")) return true
+    if (message.includes("tokens per minute")) return true
+    if (message.includes("request too large")) return true
+    if (message.includes("please reduce your message size")) return true
+    if (message.includes("unavailable")) return true
+
+    return false
 }
 
 export async function explainFileText({ fileContent, fileName, filePath }) {

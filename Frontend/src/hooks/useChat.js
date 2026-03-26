@@ -65,7 +65,11 @@ export default function useChat() {
                     const data = line.slice(6)
                     if (data === "[DONE]") return
                     try {
-                        const { text } = JSON.parse(data)
+                        const { text, error } = JSON.parse(data)
+                        if (error) {
+                            updateLastMessage(`\n\n[error: ${error}]`)
+                            return
+                        }
                         if (text) updateLastMessage(text)
                     } catch {
                         // skip malformed

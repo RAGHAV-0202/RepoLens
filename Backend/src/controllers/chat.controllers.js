@@ -34,8 +34,8 @@ export const chat = asyncHandler(async (req, res, next) => {
     const recentHistory = history
         .filter(m => m.role === "user" || m.role === "assistant")
         .filter(m => typeof m.content === "string" && m.content.trim().length > 0)
-        .slice(-10)
-        .map(m => ({ role: m.role, content: m.content.slice(0, 1000) }))
+        .slice(-6)
+        .map(m => ({ role: m.role, content: m.content.slice(0, 500) }))
 
     await chatWithRepo({
         message,
