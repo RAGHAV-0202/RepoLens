@@ -59,18 +59,16 @@ export async function explainFile({ fileContent, fileName, filePath }, res) {
 
     setSSEHeaders(res)
 
-    const stream = await callWithFallback({
+    await pipeStreamWithFallback({
         models: MAIN_MODELS,
-        stream: true,
         temperature: 0.3,
         max_tokens: 1024,
         messages: [
             { role: "system", content: EXPLAIN_FILE_PROMPT },
             { role: "user", content: userMessage }
-        ]
+        ],
+        res
     })
-
-    await pipeStream(stream, res)
 }
 
 
@@ -85,15 +83,13 @@ export async function chatWithRepo({ message, history, contextFiles, repoName },
 
     setSSEHeaders(res)
 
-    const stream = await callWithFallback({
+    await pipeStreamWithFallback({
         models: FAST_MODELS,
-        stream: true,
         temperature: 0.4,
         max_tokens: 1024,
-        messages
+        messages,
+        res
     })
-
-    await pipeStream(stream, res)
 }
 
 
@@ -168,6 +164,60 @@ async function pipeStream(stream, res) {
     } finally {
         res.end()
     }
+}
+
+// ─── streaming with fallback ──────────────────────────────────────────────────
+// tries each model in chain, falling back on 429/503 during streaming
+
+async function pipeStreamWithFallback({ models, temperature, max_tokens, messages, res }) {
+    let lastError = null
+
+    for (let i = 0; i < models.length; i++) {
+        const model = models[i]
+
+        try {
+            console.log(`[llm] streaming with model: ${model}`)
+
+            const stream = await groq.chat.completions.create({
+                model,
+                stream: true,
+                temperature,
+                max_tokens,
+                messages
+            })
+
+            // attempt to stream and detect errors
+            await pipeStream(stream, res)
+            console.log(`[llm] streaming completed successfully with model: ${model}`)
+            return
+
+        } catch (err) {
+            lastError = err
+            const isRateLimit = err?.status === 429 || err?.message?.includes("rate limit")
+            const isModelUnavailable = err?.status === 503 || err?.message?.includes("unavailable")
+
+            if ((isRateLimit || isModelUnavailable) && i + 1 < models.length) {
+                console.warn(`[llm] model ${model} rate limited/unavailable during stream. trying next model...`)
+                await sleep(RETRY_DELAY_MS)
+                continue
+            } else if (isRateLimit || isModelUnavailable) {
+                console.error(`[llm] all models rate limited/unavailable`)
+                res.write(`data: ${JSON.stringify({ error: `All models rate limited or unavailable. Last error: ${err.message}` })}\n\n`)
+                res.end()
+                return
+            } else {
+                // non-recoverable error
+                console.error(`[llm] non-recoverable error on model ${model}:`, err.message)
+                res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`)
+                res.end()
+                return
+            }
+        }
+    }
+
+    // should not reach here
+    res.write(`data: ${JSON.stringify({ error: "No models available" })}\n\n`)
+    res.end()
 }
 
 

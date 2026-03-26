@@ -117,11 +117,32 @@ export function buildTree(tempDir) {
 
     const tree = walk(tempDir)
 
-    // convert language file counts to percentages
+    // convert language file counts to percentages with largest remainder method
+    // ensures percentages sum to exactly 100%
     const totalLangFiles = Object.values(stats.languages).reduce((a, b) => a + b, 0)
     const langPercents = {}
-    for (const [lang, count] of Object.entries(stats.languages)) {
-        langPercents[lang] = Math.round((count / totalLangFiles) * 100)
+
+    if (totalLangFiles > 0) {
+        // calculate exact percentages and remainders
+        const entries = Object.entries(stats.languages)
+        const percentages = entries.map(([lang, count]) => ({
+            lang,
+            exact: (count / totalLangFiles) * 100,
+            floor: Math.floor((count / totalLangFiles) * 100),
+            remainder: ((count / totalLangFiles) * 100) % 1
+        }))
+
+        // start with floored values
+        percentages.forEach(p => {
+            langPercents[p.lang] = p.floor
+        })
+
+        // distribute remaining percentage points to languages with largest remainders
+        const remaining = 100 - Object.values(langPercents).reduce((a, b) => a + b, 0)
+        const sortedByRemainder = percentages.sort((a, b) => b.remainder - a.remainder)
+        for (let i = 0; i < remaining; i++) {
+            langPercents[sortedByRemainder[i].lang]++
+        }
     }
 
     // primary language = highest percentage

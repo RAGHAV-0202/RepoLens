@@ -845,8 +845,29 @@ function getLanguageBreakdown(stats, tree) {
     const total = [...counts.values()].reduce((a, b) => a + b, 0)
     if (!total) return [{ name: "Unknown", percent: 100 }]
 
-    return [...counts.entries()]
-        .map(([name, count]) => ({ name, percent: Math.round((count / total) * 100) }))
+    // use largest remainder method for consistent 100% total
+    const entries = [...counts.entries()]
+    const percentages = entries.map(([name, count]) => ({
+        name,
+        exact: (count / total) * 100,
+        floor: Math.floor((count / total) * 100),
+        remainder: ((count / total) * 100) % 1
+    }))
+
+    const result = {}
+    percentages.forEach(p => {
+        result[p.name] = p.floor
+    })
+
+    // distribute remaining percentage points
+    const remaining = 100 - Object.values(result).reduce((a, b) => a + b, 0)
+    const sortedByRemainder = percentages.sort((a, b) => b.remainder - a.remainder)
+    for (let i = 0; i < remaining; i++) {
+        result[sortedByRemainder[i].name]++
+    }
+
+    return Object.entries(result)
+        .map(([name, percent]) => ({ name, percent }))
         .sort((a, b) => b.percent - a.percent)
         .slice(0, 6)
 }
