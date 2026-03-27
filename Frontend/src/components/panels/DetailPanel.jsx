@@ -42,7 +42,7 @@ export default function DetailPanel() {
         [architecture, tree]
     )
     const keyFolders = useMemo(() => getTopFolders(tree, 8), [tree])
-    const mainFeatures = useMemo(() => inferMainFeatures(summary), [summary])
+    const mainFeatures = useMemo(() => inferMainFeatures(tree, architecture, stats), [tree, architecture, stats])
     const startHereFiles = useMemo(() => getStartHereFiles(tree), [tree])
     const inferredArchitecture = useMemo(() => inferStack(tree, stats), [tree, stats])
     const inferredLanguages = useMemo(() => getLanguageBreakdown(stats, tree), [stats, tree])
@@ -157,17 +157,6 @@ export default function DetailPanel() {
                             </div>
                         </div>
                     </div>
-
-                    {summary && (
-                        <div className="section" style={{ marginBottom: 0 }}>
-                            <div className="section-label">Repository Summary</div>
-                            <div className="ov-card" style={{ marginBottom: 0 }}>
-                                <div className="prose" style={{ fontSize: "13.5px", lineHeight: 1.9 }}>
-                                    <MarkdownBlock text={summary} />
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                     <div className="section" style={{ marginBottom: 0 }}>
                         <div className="section-label">Start Here Guide</div>
@@ -539,11 +528,18 @@ function getKeyModules(architecture, tree) {
         }
     }
 
-    if (fromLlm.length >= 3) return dedupeModules(fromLlm).slice(0, 8)
+    const qualityFromLlm = dedupeModules(fromLlm).filter((m) => isUsefulModuleCandidate(m.key || m.name))
+    if (qualityFromLlm.length >= 3) {
+        return disambiguateModuleNames(qualityFromLlm.slice(0, 8).map(({ key, name, why }) => ({ key, name, why })))
+    }
 
     const files = flattenFiles(tree, [])
     const dirs = flattenDirs(tree, []).filter((d) => d.path && d.path !== "/")
     const candidates = []
+    const noisyFolderNames = new Set([
+        "local", "remote", "temp", "tmp", "tests", "test", "spec",
+        "__tests__", "__pycache__", "node_modules", "dist", "build", "coverage"
+    ])
 
     const dirSignals = [
         { token: "routes", why: "Endpoint map and HTTP surface", score: 230 },
@@ -563,12 +559,17 @@ function getKeyModules(architecture, tree) {
     for (const dir of dirs) {
         const pathLower = (dir.path || "").toLowerCase()
         const depth = (dir.path.match(/\//g) || []).length
+        const basename = pathLower.split("/").filter(Boolean).pop() || ""
+
+        if (noisyFolderNames.has(basename)) continue
+        if (depth > 4) continue
+
         for (const signal of dirSignals) {
-            if (!pathLower.includes(signal.token)) continue
+            if (!hasSegment(pathLower, signal.token)) continue
             const score = signal.score + Math.max(0, 24 - depth * 3)
             candidates.push({
                 key: dir.path,
-                name: humanModuleName(dir.path),
+                name: moduleLabelFromPath(dir.path),
                 why: formatModuleWhy(signal.why, dir.path),
                 score,
                 kind: "core",
@@ -586,13 +587,15 @@ function getKeyModules(architecture, tree) {
     ]
 
     for (const f of files) {
+        const fileBase = String(f.name || "").toLowerCase()
+        if (noisyFolderNames.has(fileBase.replace(/\.[^.]+$/, ""))) continue
         const depth = (f.path.match(/\//g) || []).length
         for (const signal of fileSignals) {
             if (!signal.test(f)) continue
             const score = signal.score + Math.max(0, 20 - depth * 2)
             candidates.push({
                 key: f.path,
-                name: humanModuleName(f.path),
+                name: moduleLabelFromPath(f.path),
                 why: formatModuleWhy(signal.why, f.path),
                 score,
                 kind: signal.kind,
@@ -618,7 +621,7 @@ function getKeyModules(architecture, tree) {
         result.push(...meta.slice(0, 8 - result.length))
     }
 
-    return result.slice(0, 8).map(({ name, why }) => ({ name, why }))
+    return disambiguateModuleNames(result.slice(0, 8).map(({ key, name, why }) => ({ key, name, why })))
 }
 
 function dedupeModules(items) {
@@ -649,6 +652,62 @@ function humanModuleName(value) {
     }
 
     return tail
+}
+
+function hasSegment(pathLower, token) {
+    const parts = String(pathLower || "").split("/").filter(Boolean)
+    return parts.some((part) => part === token || part.includes(token))
+}
+
+function moduleLabelFromPath(value) {
+    const text = String(value || "").replace(/^\/+|\/+$/g, "")
+    if (!text) return "module"
+    const parts = text.split("/")
+    if (parts.length <= 2) return text
+
+    const tail = parts[parts.length - 1]
+    const prev = parts[parts.length - 2]
+    const lowTail = tail.toLowerCase()
+
+    if (["index.js", "index.ts", "app.js", "server.js", "main.py", "main.ts"].includes(lowTail)) {
+        return `${prev}/${tail}`
+    }
+
+    return `${prev}/${tail}`
+}
+
+function disambiguateModuleNames(items) {
+    const counts = new Map()
+    for (const item of items) {
+        counts.set(item.name, (counts.get(item.name) || 0) + 1)
+    }
+
+    return items.map((item) => {
+        if ((counts.get(item.name) || 0) <= 1) {
+            return { name: item.name, why: item.why }
+        }
+        return {
+            name: item.key,
+            why: item.why,
+        }
+    })
+}
+
+function isUsefulModuleCandidate(value) {
+    const text = String(value || "").trim().toLowerCase()
+    if (!text) return false
+
+    const generic = new Set([
+        "api", "local", "remote", "files", "file", "module", "modules",
+        "service", "services", "controller", "controllers", "utils", "helper",
+        "helpers", "src", "app", "backend", "frontend", "client", "server"
+    ])
+
+    if (generic.has(text)) return false
+    if (text.length < 5) return false
+
+    const hasPathShape = text.includes("/") || text.includes(".") || text.includes("_") || text.includes("-")
+    return hasPathShape || text.split(" ").length >= 2
 }
 
 function formatModuleWhy(reason, location) {
@@ -690,33 +749,54 @@ function getStartHereFiles(tree) {
     return unique
 }
 
-function inferMainFeatures(summary) {
-    if (!summary || typeof summary !== "string") {
-        return [
-            "Repository architecture and module responsibilities",
-            "Primary execution flow from entry points",
-            "Key configuration and integration points",
-        ]
+function inferMainFeatures(tree, architecture, stats) {
+    const files = flattenFiles(tree, [])
+    const names = new Set(files.map((f) => (f.name || "").toLowerCase()))
+    const paths = files.map((f) => (f.path || "").toLowerCase())
+
+    const has = (name) => names.has(name)
+    const hasPath = (token) => paths.some((p) => p.includes(token))
+    const features = []
+
+    if (has("docker-compose.yml") || has("docker-compose.yaml") || has("dockerfile") || has("compose.yaml")) {
+        features.push("Containerized setup available for local/dev deployment")
+    }
+    if (hasPath("/routes/") || hasPath("/controller") || hasPath("/api/")) {
+        features.push("API/service layer with modular route and controller structure")
+    }
+    if (has("requirements.txt") || has("pyproject.toml") || has("package.json") || has("pom.xml") || has("go.mod")) {
+        features.push("Dependency-managed project with explicit runtime/tooling manifests")
+    }
+    if (hasPath("/models/") || hasPath("mongo") || hasPath("prisma") || has("schema.prisma")) {
+        features.push("Data/domain modeling layer separated from request handling")
+    }
+    if (hasPath("/frontend/") || hasPath("/client/") || has("index.html") || has("vite.config.js") || has("vite.config.ts")) {
+        features.push("UI/client application included alongside backend/service code")
+    }
+    if (Array.isArray(stats?.languages) || (stats?.languages && Object.keys(stats.languages || {}).length > 1)) {
+        features.push("Polyglot repository spanning multiple languages and toolchains")
+    }
+    if (architecture?.pattern) {
+        features.push(`Architecture pattern inferred as ${architecture.pattern}`)
     }
 
-    const cleaned = summary
-        .replace(/\*\*/g, "")
-        .replace(/`/g, "")
-        .trim()
+    const unique = []
+    const seen = new Set()
+    for (const feature of features) {
+        const key = feature.toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        unique.push(feature)
+        if (unique.length >= 4) break
+    }
 
-    const bullets = cleaned
-        .split(/\n+/)
-        .map((l) => l.replace(/^[-*•]\s*/, "").trim())
-        .filter((l) => l.length > 18)
+    if (unique.length > 0) return unique
 
-    const candidates = bullets.length > 0
-        ? bullets
-        : cleaned
-            .split(/[.;]\s+/)
-            .map((s) => s.trim())
-            .filter((s) => s.length > 18)
-
-    return candidates.slice(0, 4)
+    return [
+        "Repository architecture and module responsibilities",
+        "Primary execution flow from entry points",
+        "Key configuration and integration points",
+    ]
 }
 
 function inferStack(tree, stats) {
