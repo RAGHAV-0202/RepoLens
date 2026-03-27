@@ -249,12 +249,36 @@ function calcQuality(files, stats, depScore, profiles) {
     const dependency = Number.isFinite(depScore) ? depScore : 72
 
     const rows = [
-        { name: "structure", score: Math.round(structure) },
-        { name: "docs", score: Math.round(docs) },
-        { name: "tests", score: Math.round(tests) },
-        { name: "automation", score: Math.round(automation) },
-        { name: "execution clarity", score: Math.round(execution) },
-        { name: "dependency hygiene", score: Math.round(dependency) },
+        {
+            name: "structure",
+            score: Math.round(structure),
+            reason: `Top-level modules: ${topLevel.size}${hasSrcLike ? " · has src/lib/app" : " · no strong src/lib/app root"}${profiles.length ? ` · archetype confidence ${profileConfidence}%` : ""}`,
+        },
+        {
+            name: "docs",
+            score: Math.round(docs),
+            reason: `${hasReadme ? "README present" : "README missing"}${hasDocsFolder ? " · docs folder present" : " · docs folder not detected"}`,
+        },
+        {
+            name: "tests",
+            score: Math.round(tests),
+            reason: `${testFiles} test/spec signals detected in paths`,
+        },
+        {
+            name: "automation",
+            score: Math.round(automation),
+            reason: `${automationFound} automation signals found (CI, Docker, lint/format, make/pre-commit)`,
+        },
+        {
+            name: "execution clarity",
+            score: Math.round(execution),
+            reason: `${hasEntry ? "entry files detected" : "entry files unclear"}${hasConfig ? " · runtime manifests present" : " · runtime manifests weak"}`,
+        },
+        {
+            name: "dependency hygiene",
+            score: Math.round(dependency),
+            reason: `Calculated from manifest risk scan (${Number.isFinite(depScore) ? "manifest-based" : "heuristic fallback"})`,
+        },
     ]
 
     const overall = Math.round(rows.reduce((sum, r) => sum + r.score, 0) / rows.length)
@@ -262,6 +286,7 @@ function calcQuality(files, stats, depScore, profiles) {
         overall,
         grade: overall >= 85 ? "A" : overall >= 72 ? "B" : overall >= 58 ? "C" : "D",
         rows,
+        explanation: `Overall is the mean of ${rows.length} dimensions: structure, docs, tests, automation, execution clarity, and dependency hygiene.`,
     }
 }
 
@@ -568,6 +593,15 @@ export default function FlowPanel() {
         packages: [],
         source: "heuristic",
     })
+    const [activeView, setActiveView] = useState("all")
+    const [expandedCards, setExpandedCards] = useState({
+        archetypes: true,
+        quality: false,
+        deps: false,
+        mapper: true,
+    })
+    const [expandedSections, setExpandedSections] = useState({})
+    const [expandedRows, setExpandedRows] = useState({})
 
     const manifests = useMemo(() => {
         const manifestDefs = [
@@ -687,121 +721,230 @@ export default function FlowPanel() {
         return <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, marginTop: 6, flexShrink: 0 }} />
     }
 
+    const toggleCard = (key) => {
+        setExpandedCards((prev) => ({ ...prev, [key]: !prev[key] }))
+    }
+
+    const toggleSection = (key) => {
+        setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }))
+    }
+
+    const toggleRow = (key) => {
+        setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }))
+    }
+
+    const shouldShow = (key) => activeView === "all" || activeView === key
+    const totalFlowRows = flows.reduce((sum, section) => sum + section.rows.length, 0)
+    const highRisks = depScanView.risks.filter((r) => r.level === "high" || r.level === "warn").length
+
     return (
         <div style={{ flex: 1, padding: 14, overflowY: "auto" }}>
             <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-ghost)", marginBottom: 10 }}>
                 Flow Mode
             </div>
 
-            <div className="ov-card" style={{ marginBottom: 12 }}>
-                <div className="ov-card-title">Repository Archetypes</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {profiles.map((p) => (
-                        <span key={p.id} className="pill pill-b" style={{ fontFamily: "var(--font-mono)" }} title={(p.reasons || []).join(" • ")}>
-                            {p.title} {p.score}%
-                        </span>
-                    ))}
+            <div className="flow-toolbar">
+                <button className={`otab ${activeView === "all" ? "on" : ""}`} onClick={() => setActiveView("all")}>all</button>
+                <button className={`otab ${activeView === "archetypes" ? "on" : ""}`} onClick={() => setActiveView("archetypes")}>archetypes</button>
+                <button className={`otab ${activeView === "quality" ? "on" : ""}`} onClick={() => setActiveView("quality")}>quality</button>
+                <button className={`otab ${activeView === "deps" ? "on" : ""}`} onClick={() => setActiveView("deps")}>dependencies</button>
+                <button className={`otab ${activeView === "mapper" ? "on" : ""}`} onClick={() => setActiveView("mapper")}>mapper</button>
+            </div>
+
+            <div className="flow-quick-grid">
+                <div className="flow-chip-card">
+                    <div className="flow-chip-label">overall</div>
+                    <div className="flow-chip-value">{quality.overall} <span>grade {quality.grade}</span></div>
+                </div>
+                <div className="flow-chip-card">
+                    <div className="flow-chip-label">dependency hygiene</div>
+                    <div className="flow-chip-value">{depScanView.score} <span>{highRisks} risk signals</span></div>
+                </div>
+                <div className="flow-chip-card">
+                    <div className="flow-chip-label">archetypes</div>
+                    <div className="flow-chip-value">{profiles.length} <span>top {profiles[0]?.title || "n/a"}</span></div>
+                </div>
+                <div className="flow-chip-card">
+                    <div className="flow-chip-label">flow steps</div>
+                    <div className="flow-chip-value">{totalFlowRows} <span>{flows.length} sections</span></div>
                 </div>
             </div>
 
-            <div className="ov-card" style={{ marginBottom: 12 }}>
-                <div className="ov-card-title">Quality Scorecard</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                    <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}>{quality.overall}</div>
-                    <div style={{ fontSize: 12, color: "var(--color-secondary)" }}>grade {quality.grade}</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {quality.rows.map((row) => (
-                        <div key={row.name}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--color-ghost)", marginBottom: 3 }}>
-                                <span>{row.name}</span>
-                                <span>{row.score}</span>
-                            </div>
-                            <div style={{ height: 5, borderRadius: 999, background: "var(--color-active)" }}>
-                                <div style={{ height: 5, borderRadius: 999, width: `${row.score}%`, background: "var(--color-ink)" }} />
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            <div className="ov-card" style={{ marginBottom: 12 }}>
-                <div className="ov-card-title">Dependency Risk & Outdated Scan</div>
-                {depScanView.loading ? (
-                    <div className="ov-prose">scanning dependency manifests...</div>
-                ) : (
-                    <>
-                        <div style={{ fontSize: 12, marginBottom: 8, color: "var(--color-secondary)" }}>
-                            hygiene score: <b style={{ color: "var(--color-ink)" }}>{depScanView.score}</b>
-                            {depScanView.source ? <span style={{ color: "var(--color-ghost)" }}> · source: {depScanView.source}</span> : null}
-                        </div>
-                        {Array.isArray(depScanView.perManifest) && depScanView.perManifest.length > 0 && (
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                                {depScanView.perManifest.map((m) => (
-                                    <span key={m.source} className="pill pill-c" style={{ fontFamily: "var(--font-mono)" }}>
-                                        {m.file}: {m.score}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-                        <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 8 }}>
-                            {depScanView.risks.length === 0 ? (
-                                <div className="ov-prose">No major dependency risk signals detected.</div>
-                            ) : depScanView.risks.map((r, i) => (
-                                <div key={i} style={{ display: "flex", gap: 8 }}>
-                                    <RiskDot level={r.level} />
-                                    <div className="ov-prose">{r.text}</div>
-                                </div>
+            {shouldShow("archetypes") && (
+                <div className="ov-card flow-card" style={{ marginBottom: 12 }}>
+                    <button className="flow-card-head" onClick={() => toggleCard("archetypes")}>
+                        <span className="ov-card-title" style={{ marginBottom: 0 }}>Repository Archetypes</span>
+                        <span className="flow-caret">{expandedCards.archetypes ? "-" : "+"}</span>
+                    </button>
+                    {expandedCards.archetypes && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {profiles.map((p) => (
+                                <span key={p.id} className="pill pill-b" style={{ fontFamily: "var(--font-mono)" }} title={(p.reasons || []).join(" • ")}>
+                                    {p.title} {p.score}%
+                                </span>
                             ))}
                         </div>
-                        {depScanView.packages.length > 0 && (
-                            <div>
-                                <div style={{ fontSize: 10, color: "var(--color-ghost)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                                    sample packages
-                                </div>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {depScanView.packages.map((p) => (
-                                        <span key={`${p.name}:${p.version}`} className="pill pill-c" style={{ fontFamily: "var(--font-mono)" }}>
-                                            {p.name}@{p.version}
+                    )}
+                </div>
+            )}
+
+            {shouldShow("quality") && (
+                <div className="ov-card flow-card" style={{ marginBottom: 12 }}>
+                    <button className="flow-card-head" onClick={() => toggleCard("quality")}>
+                        <span className="ov-card-title" style={{ marginBottom: 0 }}>Quality Scorecard</span>
+                        <span className="flow-caret">{expandedCards.quality ? "-" : "+"}</span>
+                    </button>
+                    {expandedCards.quality && (
+                        <>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                                <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}>{quality.overall}</div>
+                                <div style={{ fontSize: 12, color: "var(--color-secondary)" }}>grade {quality.grade}</div>
+                            </div>
+                            <div className="ov-prose" style={{ marginBottom: 8 }}>
+                                {quality.explanation}
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {quality.rows.map((row) => (
+                                    <div key={row.name}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--color-ghost)", marginBottom: 3 }}>
+                                            <span>{row.name}</span>
+                                            <span>{row.score}</span>
+                                        </div>
+                                        <div style={{ height: 5, borderRadius: 999, background: "var(--color-active)" }}>
+                                            <div style={{ height: 5, borderRadius: 999, width: `${row.score}%`, background: "var(--color-ink)" }} />
+                                        </div>
+                                        <div style={{ fontSize: 10, color: "var(--color-ghost)", marginTop: 4, lineHeight: 1.4 }}>
+                                            {row.reason}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {shouldShow("deps") && (
+                <div className="ov-card flow-card" style={{ marginBottom: 12 }}>
+                    <button className="flow-card-head" onClick={() => toggleCard("deps")}>
+                        <span className="ov-card-title" style={{ marginBottom: 0 }}>Dependency Risk & Outdated Scan</span>
+                        <span className="flow-caret">{expandedCards.deps ? "-" : "+"}</span>
+                    </button>
+                    {expandedCards.deps && (depScanView.loading ? (
+                        <div className="ov-prose">scanning dependency manifests...</div>
+                    ) : (
+                        <>
+                            <div style={{ fontSize: 12, marginBottom: 8, color: "var(--color-secondary)" }}>
+                                hygiene score: <b style={{ color: "var(--color-ink)" }}>{depScanView.score}</b>
+                                {depScanView.source ? <span style={{ color: "var(--color-ghost)" }}> · source: {depScanView.source}</span> : null}
+                            </div>
+                            {Array.isArray(depScanView.perManifest) && depScanView.perManifest.length > 0 && (
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                                    {depScanView.perManifest.map((m) => (
+                                        <span key={m.source} className="pill pill-c" style={{ fontFamily: "var(--font-mono)" }}>
+                                            {m.file}: {m.score}
                                         </span>
                                     ))}
                                 </div>
+                            )}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 8 }}>
+                                {depScanView.risks.length === 0 ? (
+                                    <div className="ov-prose">No major dependency risk signals detected.</div>
+                                ) : depScanView.risks.slice(0, 4).map((r, i) => (
+                                    <div key={i} style={{ display: "flex", gap: 8 }}>
+                                        <RiskDot level={r.level} />
+                                        <div className="ov-prose">{r.text}</div>
+                                    </div>
+                                ))}
+                                {depScanView.risks.length > 4 && (
+                                    <button className="otab" onClick={() => toggleRow("deps-risks")}>{expandedRows["deps-risks"] ? "less risks" : `+${depScanView.risks.length - 4} more risks`}</button>
+                                )}
+                                {expandedRows["deps-risks"] && depScanView.risks.slice(4).map((r, i) => (
+                                    <div key={`extra-${i}`} style={{ display: "flex", gap: 8 }}>
+                                        <RiskDot level={r.level} />
+                                        <div className="ov-prose">{r.text}</div>
+                                    </div>
+                                ))}
                             </div>
-                        )}
-                    </>
-                )}
-            </div>
-
-            <div className="ov-card" style={{ marginBottom: 0 }}>
-                <div className="ov-card-title">Execution Flow Mapper</div>
-                {flows.map((section) => (
-                    <div key={section.title} style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 10, color: "var(--color-ghost)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
-                            {section.title}
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {section.rows.map((row) => (
-                                <div key={`${section.title}-${row.step}`} className="kv" style={{ padding: "6px 0" }}>
-                                    <div className="kv-k" style={{ width: 110 }}>{row.step}</div>
-                                    <div className="kv-v" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                        {row.files.map((path) => (
-                                            <button
-                                                key={path}
-                                                onClick={() => openPath(path)}
-                                                className="chat-citation"
-                                                style={{ fontSize: 10.5 }}
-                                                title="Open file"
-                                            >
-                                                {path}
-                                            </button>
+                            {depScanView.packages.length > 0 && (
+                                <div>
+                                    <div style={{ fontSize: 10, color: "var(--color-ghost)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                                        sample packages
+                                    </div>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                        {depScanView.packages.slice(0, expandedRows["deps-packages"] ? 12 : 6).map((p) => (
+                                            <span key={`${p.name}:${p.version}`} className="pill pill-c" style={{ fontFamily: "var(--font-mono)" }}>
+                                                {p.name}@{p.version}
+                                            </span>
                                         ))}
                                     </div>
+                                    {depScanView.packages.length > 6 && (
+                                        <button className="otab" style={{ marginTop: 8 }} onClick={() => toggleRow("deps-packages")}>
+                                            {expandedRows["deps-packages"] ? "show fewer" : "show all packages"}
+                                        </button>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
+                            )}
+                        </>
+                    ))}
+                </div>
+            )}
+
+            {shouldShow("mapper") && (
+                <div className="ov-card flow-card" style={{ marginBottom: 0 }}>
+                    <button className="flow-card-head" onClick={() => toggleCard("mapper")}>
+                        <span className="ov-card-title" style={{ marginBottom: 0 }}>Execution Flow Mapper</span>
+                        <span className="flow-caret">{expandedCards.mapper ? "-" : "+"}</span>
+                    </button>
+                    {expandedCards.mapper && flows.map((section) => {
+                        const sectionOpen = expandedSections[section.title] !== undefined
+                            ? !!expandedSections[section.title]
+                            : section.title === flows[0]?.title
+                        return (
+                            <div key={section.title} className="flow-section">
+                                <button className="flow-section-head" onClick={() => toggleSection(section.title)}>
+                                    <span>{section.title}</span>
+                                    <span>{sectionOpen ? "-" : "+"}</span>
+                                </button>
+                                {sectionOpen && (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                        {section.rows.map((row) => {
+                                            const rowKey = `${section.title}-${row.step}`
+                                            const expanded = !!expandedRows[rowKey]
+                                            const visibleFiles = expanded ? row.files : row.files.slice(0, 2)
+                                            return (
+                                                <div key={rowKey} className="kv" style={{ padding: "6px 0" }}>
+                                                    <div className="kv-k" style={{ width: 110 }}>{row.step}</div>
+                                                    <div className="kv-v" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                                            {visibleFiles.map((path) => (
+                                                                <button
+                                                                    key={path}
+                                                                    onClick={() => openPath(path)}
+                                                                    className="chat-citation"
+                                                                    style={{ fontSize: 10.5 }}
+                                                                    title="Open file"
+                                                                >
+                                                                    {path}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        {row.files.length > 2 && (
+                                                            <button className="otab flow-inline-toggle" onClick={() => toggleRow(rowKey)}>
+                                                                {expanded ? "show fewer" : `+${row.files.length - 2} more`}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
         </div>
     )
 }
