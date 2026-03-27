@@ -670,6 +670,8 @@ a { color: inherit; text-decoration: none; }
   background: transparent;
   padding: 0;
   cursor: pointer;
+  pointer-events: auto;
+  display: inline;
 }
 
 .chat-code-wrap {

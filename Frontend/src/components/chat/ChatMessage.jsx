@@ -252,13 +252,14 @@ function Inline({ text, onCitationClick, defaultFilePath = null }) {
                 const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
                 if (linkMatch) {
                     const [, label, target] = linkMatch
-                    if (isCitationTarget(target)) {
+                    const citation = resolveCitationFromLink(label, target, defaultFilePath)
+                    if (citation) {
                         return (
                             <button
                                 key={i}
                                 type="button"
                                 className="chat-citation"
-                                onClick={() => onCitationClick?.(target)}
+                                onClick={() => onCitationClick?.(citation)}
                                 title="Open cited file and jump to lines"
                             >
                                 {label}
@@ -289,7 +290,7 @@ function renderTextWithAutoCitations(text, onCitationClick, keyPrefix = "c", def
     const nodes = []
     let lastIndex = 0
 
-    const re = /`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s*\((?:line|lines)\s*(\d+)(?:\s*[-–]\s*(\d+))?\)|`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)#L(\d+)(?:-L?(\d+))?`?|\bL(\d+)(?:\s*[-–]\s*L?(\d+))?\b/g
+    const re = /`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s*\((?:line|lines)\s*(\d+)(?:\s*[-–]\s*(\d+))?\)|`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)#L(\d+)(?:-L?(\d+))?`?|`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+):(\d+)(?:\s*[-–:]\s*(\d+))?`?|\bL(\d+)(?:\s*[-–]\s*L?(\d+))?\b/g
     let m
 
     while ((m = re.exec(text)) !== null) {
@@ -304,12 +305,16 @@ function renderTextWithAutoCitations(text, onCitationClick, keyPrefix = "c", def
         const startB = m[5]
         const endB = m[6]
 
-        const startC = m[7]
-        const endC = m[8]
+        const pathC = m[7]
+        const startC = m[8]
+        const endC = m[9]
 
-        const path = pathA || pathB || defaultFilePath
-        const start = Number(startA || startB || startC)
-        const end = Number(endA || endB || endC || start)
+        const startD = m[10]
+        const endD = m[11]
+
+        const path = pathA || pathB || pathC || defaultFilePath
+        const start = Number(startA || startB || startC || startD)
+        const end = Number(endA || endB || endC || endD || start)
 
         if (path && Number.isFinite(start) && start > 0) {
             const target = `${normalizeRepoPath(path)}#L${start}${end > start ? `-L${end}` : ""}`
@@ -349,22 +354,92 @@ function isCitationTarget(target) {
     return !!parseCitationTarget(target)
 }
 
+function resolveCitationFromLink(label, target, defaultFilePath = null) {
+    const fromTarget = parseCitationTarget(target)
+    if (fromTarget) return buildCitationTarget(fromTarget)
+
+    const fromLabel = parseCitationTarget(label)
+    if (fromLabel) return buildCitationTarget(fromLabel)
+
+    // Handle split format: [file#L10-L12](file) or [L10-L12](file)
+    const labelPathAndLine = parsePathAndLine(label)
+    if (labelPathAndLine) return buildCitationTarget(labelPathAndLine)
+
+    const targetPath = normalizeRepoPath(target)
+    const labelLineOnly = parseLineOnly(label)
+    if (targetPath && labelLineOnly) {
+        return `${targetPath}#L${labelLineOnly.startLine}${labelLineOnly.endLine > labelLineOnly.startLine ? `-L${labelLineOnly.endLine}` : ""}`
+    }
+
+    const targetLineOnly = parseLineOnly(target)
+    const safeDefault = normalizeRepoPath(defaultFilePath)
+    if (safeDefault && targetLineOnly) {
+        return `${safeDefault}#L${targetLineOnly.startLine}${targetLineOnly.endLine > targetLineOnly.startLine ? `-L${targetLineOnly.endLine}` : ""}`
+    }
+
+    return null
+}
+
 function parseCitationTarget(target) {
     if (!target || typeof target !== "string") return null
     const clean = target.trim()
-    const match = clean.match(/^(.+?)#L(\d+)(?:-L?(\d+))?$/i)
-    if (!match) return null
+    const hashMatch = clean.match(/^(.+?)#L(\d+)(?:-L?(\d+))?$/i)
+    if (hashMatch) {
+        const filePath = normalizeRepoPath(hashMatch[1])
+        const startLine = Number(hashMatch[2])
+        const endLine = Number(hashMatch[3] || hashMatch[2])
+        if (!filePath || !Number.isFinite(startLine) || startLine <= 0) return null
 
-    const filePath = normalizeRepoPath(match[1])
-    const startLine = Number(match[2])
-    const endLine = Number(match[3] || match[2])
-    if (!filePath || !Number.isFinite(startLine) || startLine <= 0) return null
+        return {
+            filePath,
+            startLine,
+            endLine: endLine >= startLine ? endLine : startLine,
+        }
+    }
 
+    const pathAndLine = parsePathAndLine(clean)
+    if (pathAndLine) return pathAndLine
+
+    return null
+}
+
+function parsePathAndLine(text) {
+    if (!text) return null
+    const clean = String(text).trim().replace(/^`|`$/g, "")
+
+    const colonMatch = clean.match(/^(.+?):(\d+)(?:\s*[-–:]\s*(\d+))?$/)
+    if (colonMatch) {
+        const filePath = normalizeRepoPath(colonMatch[1])
+        const startLine = Number(colonMatch[2])
+        const endLine = Number(colonMatch[3] || colonMatch[2])
+        if (!filePath || !Number.isFinite(startLine) || startLine <= 0) return null
+        return {
+            filePath,
+            startLine,
+            endLine: endLine >= startLine ? endLine : startLine,
+        }
+    }
+
+    return null
+}
+
+function parseLineOnly(text) {
+    if (!text) return null
+    const clean = String(text).trim().replace(/^`|`$/g, "")
+    const m = clean.match(/^L(\d+)(?:\s*[-–]\s*L?(\d+))?$/i)
+    if (!m) return null
+    const startLine = Number(m[1])
+    const endLine = Number(m[2] || m[1])
+    if (!Number.isFinite(startLine) || startLine <= 0) return null
     return {
-        filePath,
         startLine,
         endLine: endLine >= startLine ? endLine : startLine,
     }
+}
+
+function buildCitationTarget(citation) {
+    if (!citation?.filePath || !citation?.startLine) return null
+    return `${citation.filePath}#L${citation.startLine}${citation.endLine > citation.startLine ? `-L${citation.endLine}` : ""}`
 }
 
 function normalizeRepoPath(p) {
