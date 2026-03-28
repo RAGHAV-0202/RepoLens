@@ -243,14 +243,28 @@ function buildChatContext(contextFiles, repoName) {
     }
 
     let ctx = `Repository: ${repoName}\n\nRelevant files:\n`
-    const entries = Object.entries(contextFiles).slice(0, 6)
-    for (const [filePath, { content }] of entries) {
-        ctx += `\n--- ${filePath} ---\n${numberedSnippet(content)}\n`
+    const entries = Object.entries(contextFiles).slice(0, 4)
+    const TOTAL_CHAR_BUDGET = 24000
+    let consumed = 0
+
+    for (let i = 0; i < entries.length; i++) {
+        const [filePath, { content }] = entries[i]
+        const remainingFiles = entries.length - i
+        const remainingBudget = Math.max(1000, TOTAL_CHAR_BUDGET - consumed)
+        const fairShare = Math.max(2200, Math.floor(remainingBudget / remainingFiles))
+
+        // Prioritize first file (often UI-selected focus file) with more room.
+        const maxChars = i === 0 ? Math.max(3500, fairShare + 1800) : fairShare
+        const maxLines = i === 0 ? 520 : 320
+        const snippet = numberedSnippet(content, maxChars, maxLines)
+
+        consumed += snippet.length
+        ctx += `\n--- ${filePath} ---\n${snippet}\n`
     }
     return ctx
 }
 
-function numberedSnippet(content, maxChars = 1500, maxLines = 120) {
+function numberedSnippet(content, maxChars = 4500, maxLines = 320) {
     const safe = typeof content === "string" ? content : ""
     const clipped = safe.slice(0, maxChars)
     const lines = clipped.split("\n").slice(0, maxLines)

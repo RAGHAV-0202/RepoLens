@@ -7,7 +7,7 @@ import { chatWithRepo } from "../services/llm.js"
 import Analysis from "../models/analysis.model.js"
 
 export const chat = asyncHandler(async (req, res, next) => {
-    const { sessionId, message, history = [] } = req.body
+    const { sessionId, message, history = [], focusFilePath } = req.body
 
     if (!sessionId) throw new apiError(400, "sessionId is required")
     if (!message?.trim()) throw new apiError(400, "message is required")
@@ -25,7 +25,7 @@ export const chat = asyncHandler(async (req, res, next) => {
     const analysis = await Analysis.findById(session.analysisId)
     if (!analysis) throw new apiError(404, "Analysis not found")
 
-    const relevantPaths = findRelevantFiles(message, analysis.treeJSON)
+    const relevantPaths = findRelevantFiles(message, analysis.treeJSON, focusFilePath)
 
     const contextFiles = relevantPaths.length > 0
         ? readFiles(session.tempDir, relevantPaths)
@@ -50,7 +50,7 @@ export const chat = asyncHandler(async (req, res, next) => {
 // scores every file in the tree against the message
 // returns top 4 most relevant file paths
 
-function findRelevantFiles(message, tree) {
+function findRelevantFiles(message, tree, focusFilePath) {
     const messageLower = message.toLowerCase()
 
     const isApiQuestion = /\b(api|endpoint|endpoints|route|routes|router|auth|analyze|chat|github)\b/.test(messageLower)
@@ -109,9 +109,18 @@ function findRelevantFiles(message, tree) {
     })
 
     // return top 8 with score > 0 (more context for route-map style questions)
-    return scored
+    const ranked = scored
         .filter(f => f.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, 8)
         .map(f => f.path)
+
+    // If user currently has a file selected in UI, force-prioritize it as first context file.
+    if (typeof focusFilePath === "string" && focusFilePath.trim().length > 0) {
+        const normalizedFocus = focusFilePath.trim()
+        const withoutFocus = ranked.filter((p) => p !== normalizedFocus)
+        return [normalizedFocus, ...withoutFocus].slice(0, 8)
+    }
+
+    return ranked
 }

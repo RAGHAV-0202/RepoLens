@@ -10,7 +10,7 @@ export default function useChat() {
         if (isSendingRef.current && !_isRetry) return
         isSendingRef.current = true
 
-        const { sessionId, chatHistory, addChatMessage, updateLastMessage } = useAppStore.getState()
+        const { sessionId, chatHistory, selectedFile, addChatMessage, updateLastMessage } = useAppStore.getState()
 
         if (!_isRetry) {
             // add user message
@@ -28,6 +28,7 @@ export default function useChat() {
                     sessionId,
                     message,
                     history: chatHistory,
+                    focusFilePath: selectedFile?.path || null,
                 }),
             })
 
