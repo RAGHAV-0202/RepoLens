@@ -3,7 +3,7 @@ import apiError from "../utils/apiError.js"
 import ApiResponse from "../utils/apiResponse.js"
 import axios from "axios"
 
-const DEFAULT_TRENDING_CACHE_TTL_MS = 5 * 60 * 1000
+const DEFAULT_TRENDING_CACHE_TTL_MS = 60 * 60 * 1000
 const rawCacheTtl = Number.parseInt(process.env.GITHUB_TRENDING_CACHE_TTL_MS || "", 10)
 const TRENDING_CACHE_TTL_MS = Number.isFinite(rawCacheTtl) && rawCacheTtl > 0
     ? rawCacheTtl
